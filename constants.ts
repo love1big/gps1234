@@ -39,6 +39,11 @@ export const AGPS_SERVERS = [
 // --- MASSIVE NTRIP NETWORK DATABASE (PLANETARY COVERAGE) ---
 // Factory-installed secure endpoints covering all 7 Continents
 export const GLOBAL_NTRIP_SERVERS: NtripCaster[] = [
+    // --- GLOBAL (GENERIC / OPEN) ---
+    { id: 'RTK2GO_GLOBAL', host: 'rtk2go.com', port: 2101, mountpoint: 'GLOBAL_VRS', region: 'GLOBAL', country: 'XX', lat: 0.00, lon: 0.00, active: true, operator: 'Community Network' },
+    { id: 'IGS_REALTIME', host: 'products.igs-ip.net', port: 2101, mountpoint: 'IGS01', region: 'GLOBAL', country: 'XX', lat: 0.00, lon: 0.00, active: true, operator: 'International GNSS Service' },
+    { id: 'GENERIC_CAST', host: '192.168.1.100', port: 2101, mountpoint: 'BASE_STATION', region: 'LOCAL', country: 'XX', lat: 0.00, lon: 0.00, active: true, operator: 'Local Base' },
+
     // --- ASIA (High Density) ---
     { id: 'TH_DPT', host: 'rtk.dpt.go.th', port: 2101, mountpoint: 'VRS_RTCM3', region: 'ASIA', country: 'TH', lat: 13.75, lon: 100.50, active: true, operator: 'Department of Public Works' },
     { id: 'TH_RTS', host: 'gnss-rts.com', port: 2101, mountpoint: 'BKK_VRS', region: 'ASIA', country: 'TH', lat: 13.72, lon: 100.53, active: true, operator: 'RTS GNSS Network' },

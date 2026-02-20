@@ -30,15 +30,6 @@ const SkyplotBackground = memo(({ size, simple }: { size: number, simple: boolea
             )}
             <Line x1={center - radius} y1={center} x2={center + radius} y2={center} stroke="#334155" />
             <Line x1={center} y1={center - radius} x2={center} y2={center + radius} stroke="#334155" />
-            
-            {!simple && (
-                <>
-                    <SvgText x={center} y={center - radius + 12} fill="#94a3b8" fontSize="10" fontWeight="bold" textAnchor="middle">N</SvgText>
-                    <SvgText x={center + radius - 12} y={center + 4} fill="#64748b" fontSize="9" fontWeight="bold" textAnchor="middle">E</SvgText>
-                    <SvgText x={center} y={center + radius - 5} fill="#64748b" fontSize="9" fontWeight="bold" textAnchor="middle">S</SvgText>
-                    <SvgText x={center - radius + 12} y={center + 4} fill="#64748b" fontSize="9" fontWeight="bold" textAnchor="middle">W</SvgText>
-                </>
-            )}
         </G>
     );
 });

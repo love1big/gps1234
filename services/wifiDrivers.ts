@@ -10,6 +10,8 @@ const DRIVER_DATABASE: Record<string, { driver: string, desc: string }> = {
     'MEDIATEK_7601': { driver: 'mt7601u.ko', desc: 'MediaTek MT7601U' },
     'ATHEROS_9271': { driver: 'ath9k_htc.ko', desc: 'Atheros AR9271 (Kali Mode)' },
     'INTEL_AX200': { driver: 'iwlwifi.ko', desc: 'Intel Wi-Fi 6 AX200' },
+    'INTEL_BE200': { driver: 'iwlwifi_be.ko', desc: 'Intel Wi-Fi 7 BE200' },
+    'BROADCOM_4360': { driver: 'wl.ko', desc: 'Broadcom BCM4360 802.11ac' },
     'GENERIC_WIFI': { driver: 'wext_generic.ko', desc: 'Universal WEXT Wrapper' }
 };
 
@@ -45,10 +47,12 @@ class UniversalWifiManager {
             let model = 'Unknown 802.11n Adapter';
             let id = 'GENERIC_WIFI';
 
-            if (seed > 0.8) { chipset = 'REALTEK'; model = 'TP-Link T3U (RTL8812)'; id = 'REALTEK_8812'; }
-            else if (seed > 0.6) { chipset = 'RALINK'; model = 'Alfa AWUS036NH'; id = 'RALINK_3070'; }
-            else if (seed > 0.4) { chipset = 'ATHEROS'; model = 'TP-Link TL-WN722N'; id = 'ATHEROS_9271'; }
-            else if (seed > 0.2) { chipset = 'MEDIATEK'; model = 'Xiaomi Wifi Mini'; id = 'MEDIATEK_7601'; }
+            if (seed > 0.9) { chipset = 'REALTEK'; model = 'TP-Link T3U (RTL8812)'; id = 'REALTEK_8812'; }
+            else if (seed > 0.8) { chipset = 'RALINK'; model = 'Alfa AWUS036NH'; id = 'RALINK_3070'; }
+            else if (seed > 0.7) { chipset = 'ATHEROS'; model = 'TP-Link TL-WN722N'; id = 'ATHEROS_9271'; }
+            else if (seed > 0.6) { chipset = 'MEDIATEK'; model = 'Xiaomi Wifi Mini'; id = 'MEDIATEK_7601'; }
+            else if (seed > 0.5) { chipset = 'INTEL'; model = 'Intel Wi-Fi 7 BE200'; id = 'INTEL_BE200'; }
+            else if (seed > 0.4) { chipset = 'BROADCOM_EXT'; model = 'ASUS PCE-AC68'; id = 'BROADCOM_4360'; }
 
             this.adapter = {
                 id,

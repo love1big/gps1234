@@ -194,19 +194,25 @@ class UniversalDriverCore {
     // --- HARDWARE RESPONSE SIMULATOR ---
     private simulateHardwareResponse(cmd: Uint8Array) {
         const cmdStr = String.fromCharCode.apply(null, Array.from(cmd));
-        const seed = Date.now() % 5;
+        const seed = Date.now() % 8; // Increased seed range
 
         setTimeout(() => {
             if (cmd[0] === 0xB5 && seed === 0) { 
-                this.setIdentity('U_BLOX', 'ZED-F9P', 'F9P_00192', 'HPG 1.30', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: false, lband: false });
+                this.setIdentity('U_BLOX', 'ZED-F9P', 'F9P_00192', 'HPG 1.50', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: false, lband: false });
             } else if (cmdStr.includes('PMTK') && seed === 1) { 
                 this.setIdentity('MEDIATEK', 'MT3339', 'MTK_L1', 'AXN_5.1', { dualBand: false, rtk: false, rawMeas: false, imuIntegrated: false, ppp: false, lband: false });
             } else if (cmdStr.includes('LOG VERSION') && seed === 2) { 
-                this.setIdentity('NOVATEL', 'OEM7700', 'OEM7_ADV', '7.08.10', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: true, ppp: true, lband: true });
+                this.setIdentity('NOVATEL', 'OEM7700', 'OEM7_ADV', '8.10.00', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: true, ppp: true, lband: true });
             } else if (seed === 3) { 
-                this.setIdentity('TRIMBLE', 'BD990', 'TRMB_BD9', '6.15', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: true, ppp: true, lband: true });
+                this.setIdentity('TRIMBLE', 'BD990', 'TRMB_BD9', '7.05', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: true, ppp: true, lband: true });
             } else if (seed === 4) { 
-                 this.setIdentity('NO_BRAND_CLONE', 'Generic NMEA GPS', 'GENERIC_001', '1.0.0', { dualBand: false, rtk: false, rawMeas: false, imuIntegrated: false, ppp: false, lband: false });
+                 this.setIdentity('NO_BRAND_CLONE', 'Generic NMEA GPS', 'GENERIC_001', '2.0.0', { dualBand: false, rtk: false, rawMeas: false, imuIntegrated: false, ppp: false, lband: false });
+            } else if (seed === 5) {
+                this.setIdentity('HEMISPHERE', 'Phantom 40', 'HEMI_P40', '6.2a', { dualBand: true, rtk: true, rawMeas: false, imuIntegrated: true, ppp: false, lband: true });
+            } else if (seed === 6) {
+                this.setIdentity('SKYTRAQ', 'PX1122R', 'SKY_PX1122', '2025.10.15', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: false, lband: false });
+            } else if (seed === 7) {
+                this.setIdentity('SEPTENTRIO', 'Mosaic-X5', 'SEPT_MOS', '5.0.1', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: true, lband: true });
             }
         }, 150);
     }

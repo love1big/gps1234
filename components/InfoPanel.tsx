@@ -53,7 +53,7 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus }) =>
 
   // Determine RTK Color & Text
   let rtkColor = '#94a3b8';
-  let rtkText = position.rtkStatus;
+  let rtkText: string = position.rtkStatus;
   
   if (position.rtkStatus === 'FIXED') {
       rtkColor = '#4ade80';

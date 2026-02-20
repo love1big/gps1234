@@ -75,7 +75,7 @@ export const scanRfEnvironment = (
     // Unrolled loop for performance - check all in pool
     for(let i=0; i<MAX_RF_NODES; i++) {
         const e = EMITTER_POOL[i];
-        if (e.lat === 0) continue; // Uninitialized slot
+        if (e.lat === undefined || e.lon === undefined || e.lat === 0) continue; // Uninitialized slot
 
         // Use Squared Distance to avoid Math.sqrt() -> Huge CPU saving
         const distSq = getDistanceSq(currentPos.latitude, currentPos.longitude, e.lat, e.lon);

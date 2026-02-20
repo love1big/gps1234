@@ -28,93 +28,132 @@ const crc32 = (data: Uint8Array): number => {
 const GLOBAL_FIRMWARE_REPO: Record<string, FirmwareMetadata> = {
     // U-BLOX
     'F9P_00192': {
-        version: 'HPG 1.32',
-        buildDate: 1704067200000,
+        version: 'HPG 1.50',
+        buildDate: 1767225600000, // Jan 2026
         sizeBytes: 2048576,
         checksumCrc32: 'A1B2C3D4',
-        downloadUrl: 'https://cdn.u-blox.com/fw/UBX_F9_100_HPG132.bin',
+        downloadUrl: 'https://cdn.u-blox.com/fw/UBX_F9_100_HPG150.bin',
         criticality: 'RECOMMENDED',
-        releaseNotes: 'Fixed Beidou B2a tracking. Optimized RTK float time.',
+        releaseNotes: 'Enhanced L5/E5a tracking sensitivity. Added support for Galileo HAS.',
         targetHwId: 'F9P_00192',
         minBatteryLevel: 0.20,
         restartRequired: true
     },
     'M8N_001': {
-        version: 'SPG 3.01',
-        buildDate: 1650000000000,
+        version: 'SPG 4.05',
+        buildDate: 1735689600000, // Jan 2025
         sizeBytes: 512000,
         checksumCrc32: '88776655',
-        downloadUrl: 'https://cdn.u-blox.com/fw/UBX_M8_301.bin',
+        downloadUrl: 'https://cdn.u-blox.com/fw/UBX_M8_405.bin',
         criticality: 'OPTIONAL',
-        releaseNotes: 'Galileo E1 improvements.',
+        releaseNotes: 'Improved jamming detection.',
         targetHwId: 'M8N_001',
         minBatteryLevel: 0.20,
         restartRequired: true
     },
     // TRIMBLE
     'TRMB_BD9': {
-        version: '6.21',
-        buildDate: 1708000000000,
+        version: '7.05',
+        buildDate: 1769817600000, // Feb 2026
         sizeBytes: 4194304,
         checksumCrc32: 'TRMB9988',
-        downloadUrl: 'https://trimble.com/support/bd990/fw_6_21.timg',
+        downloadUrl: 'https://trimble.com/support/bd990/fw_7_05.timg',
         criticality: 'CRITICAL',
-        releaseNotes: 'Security patch for Maxwell 7 chipset. Enhanced RTX convergence.',
+        releaseNotes: 'ProPoint engine update. RTX Fast convergence improvements.',
         targetHwId: 'TRMB_BD9',
-        minBatteryLevel: 0.50, // Higher requirement for survey gear
+        minBatteryLevel: 0.50,
         restartRequired: true
     },
     // NOVATEL
     'OEM7_GEN_3': {
-        version: '7.09.02',
-        buildDate: 1710000000000,
+        version: '8.10.00',
+        buildDate: 1772409600000, // Mar 2026
         sizeBytes: 8388608,
         checksumCrc32: 'NVTL7777',
-        downloadUrl: 'https://novatel.com/firmware/oem7/70902.hex',
+        downloadUrl: 'https://novatel.com/firmware/oem7/81000.hex',
         criticality: 'RECOMMENDED',
-        releaseNotes: 'SPAN INS alignment speed increased by 30%.',
+        releaseNotes: 'Interference Toolkit 2.0. SPAN tight coupling optimization.',
         targetHwId: 'OEM7_GEN_3',
         minBatteryLevel: 0.40,
         restartRequired: true
     },
     // SEPTENTRIO
     'SEPT_MOS': {
-        version: '4.14.0',
-        buildDate: 1705000000000,
+        version: '5.0.1',
+        buildDate: 1764547200000, // Dec 2025
         sizeBytes: 6000000,
-        checksumCrc32: 'SEPT4140',
-        downloadUrl: 'https://septentrio.com/firmware/mosaic/4_14.suf',
+        checksumCrc32: 'SEPT5010',
+        downloadUrl: 'https://septentrio.com/firmware/mosaic/5_0_1.suf',
         criticality: 'OPTIONAL',
-        releaseNotes: 'Added OSNMA support for Galileo.',
+        releaseNotes: 'Full OSNMA support. AIM+ anti-spoofing enhancements.',
         targetHwId: 'SEPT_MOS',
         minBatteryLevel: 0.30,
         restartRequired: true
     },
     // GARMIN
     'GARMIN_GLO': {
-        version: '3.00',
-        buildDate: 1600000000000,
+        version: '4.20',
+        buildDate: 1748736000000, // Jun 2025
         sizeBytes: 256000,
-        checksumCrc32: 'GARM300',
-        downloadUrl: 'https://garmin.com/glo/update.rgn',
+        checksumCrc32: 'GARM420',
+        downloadUrl: 'https://garmin.com/glo/update_420.rgn',
         criticality: 'RECOMMENDED',
-        releaseNotes: 'Bluetooth stability fixes.',
+        releaseNotes: 'Improved battery life. Faster cold start.',
         targetHwId: 'GARMIN_GLO2',
         minBatteryLevel: 0.20,
         restartRequired: true
     },
+    // HEMISPHERE
+    'HEMI_P40': {
+        version: '6.2a',
+        buildDate: 1751328000000, // Jul 2025
+        sizeBytes: 3145728,
+        checksumCrc32: 'HEMI62A',
+        downloadUrl: 'https://hemispheregnss.com/fw/phantom40_6.2a.bin',
+        criticality: 'RECOMMENDED',
+        releaseNotes: 'Atlas correction service update.',
+        targetHwId: 'HEMI_P40',
+        minBatteryLevel: 0.30,
+        restartRequired: true
+    },
+    // SKYTRAQ
+    'SKY_PX1122': {
+        version: '2025.10.15',
+        buildDate: 1760572800000, // Oct 2025
+        sizeBytes: 1048576,
+        checksumCrc32: 'SKY1122',
+        downloadUrl: 'https://navspark.mybigcommerce.com/firmware/px1122_20251015.bin',
+        criticality: 'OPTIONAL',
+        releaseNotes: 'RTK base station mode stability fix.',
+        targetHwId: 'SKY_PX1122',
+        minBatteryLevel: 0.25,
+        restartRequired: true
+    },
+    // GENERIC / CLONE
+    'GENERIC_001': {
+        version: 'GEN_2.0_STABLE',
+        buildDate: 1738368000000, // Feb 2025
+        sizeBytes: 128000,
+        checksumCrc32: 'GEN200',
+        downloadUrl: 'https://github.com/generic-gnss/firmware/releases/v2.0.bin',
+        criticality: 'OPTIONAL',
+        releaseNotes: 'NMEA 4.11 compliance update.',
+        targetHwId: 'GENERIC_001',
+        minBatteryLevel: 0.10,
+        restartRequired: true
+    },
     // INTERNAL (SIMULATED OTA)
     'INTERNAL': {
-        version: 'QC_GNSS_5.1.0_PATCH_3',
-        buildDate: 1712000000000,
-        sizeBytes: 4096,
-        checksumCrc32: 'OTA_PATCH',
-        downloadUrl: 'ota://android/system/gnss/patch_q3',
+        version: 'QC_GNSS_6.0.0_PATCH_1',
+        buildDate: 1775001600000, // Apr 2026
+        sizeBytes: 8192,
+        checksumCrc32: 'OTA_PATCH_V6',
+        downloadUrl: 'ota://android/system/gnss/patch_q4',
         criticality: 'CRITICAL',
-        releaseNotes: 'XTRA Injection Logic Update. L5 Signal Handover fix.',
+        releaseNotes: 'XTRA 3.0 Injection Logic. 5G-L1 Coexistence Filter.',
         targetHwId: 'INTERNAL',
         minBatteryLevel: 0.15,
-        restartRequired: false // Microcode patch usually applies instantly
+        restartRequired: false 
     }
 };
 
@@ -176,6 +215,11 @@ export class FirmwareEngine {
             if (identity.vendor === 'U_BLOX') match = GLOBAL_FIRMWARE_REPO['F9P_00192'];
             else if (identity.vendor === 'TRIMBLE') match = GLOBAL_FIRMWARE_REPO['TRMB_BD9'];
             else if (identity.vendor === 'NOVATEL') match = GLOBAL_FIRMWARE_REPO['OEM7_GEN_3'];
+            else if (identity.vendor === 'SEPTENTRIO') match = GLOBAL_FIRMWARE_REPO['SEPT_MOS'];
+            else if (identity.vendor === 'GARMIN') match = GLOBAL_FIRMWARE_REPO['GARMIN_GLO'];
+            else if (identity.vendor === 'HEMISPHERE') match = GLOBAL_FIRMWARE_REPO['HEMI_P40'];
+            else if (identity.vendor === 'SKYTRAQ') match = GLOBAL_FIRMWARE_REPO['SKY_PX1122'];
+            else if (identity.vendor === 'GENERIC_NMEA' || identity.vendor === 'NO_BRAND_CLONE') match = GLOBAL_FIRMWARE_REPO['GENERIC_001'];
             else if (identity.connectionInterface === 'INTERNAL_BUS') match = GLOBAL_FIRMWARE_REPO['INTERNAL'];
         }
 

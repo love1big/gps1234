@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import * as Battery from 'expo-battery';
 import { GNSSConfig, PositionData, UsbDeviceStatus, FirmwareMetadata, ExternalWifiAdapter, NavAppProfile, BluetoothDevice, OperationMode, WeatherCondition } from '../types';
@@ -21,11 +21,29 @@ interface Props {
   usbStatus?: UsbDeviceStatus; 
 }
 
+const safeHaptics = {
+    impactAsync: async (style: Haptics.ImpactFeedbackStyle) => {
+        try {
+            if (Platform.OS !== 'web') await Haptics.impactAsync(style);
+        } catch (e) {}
+    },
+    notificationAsync: async (type: Haptics.NotificationFeedbackType) => {
+        try {
+            if (Platform.OS !== 'web') await Haptics.notificationAsync(type);
+        } catch (e) {}
+    },
+    selectionAsync: async () => {
+        try {
+            if (Platform.OS !== 'web') await Haptics.selectionAsync();
+        } catch (e) {}
+    }
+};
+
 const Toggle = ({ label, active, onClick, description }: { label: string, active: boolean, onClick: () => void, description?: string }) => (
   <TouchableOpacity 
     style={[styles.toggle, active ? styles.activeToggle : null]} 
     onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        safeHaptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onClick();
     }}
     activeOpacity={0.8}
@@ -61,7 +79,7 @@ const ModeSelector = ({ current, onSelect }: { current: OperationMode, onSelect:
                             current === m.id ? { backgroundColor: m.color } : null
                         ]}
                         onPress={() => {
-                            Haptics.selectionAsync();
+                            safeHaptics.selectionAsync();
                             onSelect(m.id);
                         }}
                     >
@@ -97,7 +115,7 @@ const WeatherSelector = ({ current, onSelect }: { current: WeatherCondition, onS
                             current === w.id ? { backgroundColor: w.color } : null
                         ]}
                         onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            safeHaptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                             onSelect(w.id);
                         }}
                     >
@@ -183,8 +201,8 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
               setIsUpdating(false);
               setFwUpdateAvailable(null);
               setLogs(p => [...p, success ? 'REBOOTING SYSTEM...' : 'SAFE ROLLBACK COMPLETED']);
-              if(success) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              if(success) safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              else safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
       );
   };
@@ -219,7 +237,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
   };
 
   const handleNavLaunch = async (appId: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      safeHaptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await NavBridge.launchApp(appId, position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
   };
 
@@ -370,14 +388,14 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
       <View style={styles.actions}>
           <TouchableOpacity 
             style={[styles.button, styles.pulseButton]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onSensorPulse(); }}
+            onPress={() => { safeHaptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onSensorPulse(); }}
           >
               <Text style={styles.buttonText}>⚡ กระตุ้นเซ็นเซอร์</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.button, styles.agpsButton]}
-            onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onManualAgpsUpdate(); }}
+            onPress={() => { safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onManualAgpsUpdate(); }}
           >
               <Text style={[styles.buttonText, { color: '#06b6d4' }]}>
                   อัปเดต A-GPS
@@ -390,7 +408,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
           <View style={styles.navRow}>
             <TouchableOpacity 
                 style={[styles.navButton, { flex: 2, marginRight: 8 }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); onOpenMaps(); }}
+                onPress={() => { safeHaptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); onOpenMaps(); }}
             >
                 <Text style={styles.navButtonText}>เปิด GOOGLE MAPS</Text>
                 <Text style={styles.navSubText}>ใช้พิกัดความละเอียดสูง</Text>
@@ -398,7 +416,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
 
             <TouchableOpacity 
                 style={[styles.navButton, { flex: 1, backgroundColor: '#059669', borderColor: '#10b981' }]}
-                onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onShareLocation(); }}
+                onPress={() => { safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onShareLocation(); }}
             >
                 <Text style={styles.navButtonText}>แชร์</Text>
                 <Text style={styles.navSubText}>Line / Social</Text>

@@ -154,7 +154,10 @@ export const initSensorListeners = async (isLowEndDevice: boolean = false) => {
             safeSetInterval(Barometer, 2000); 
             subBaro = Barometer.addListener(data => {
                 if (data && !isNaN(data.pressure)) {
-                    hwBuffer.baro = data;
+                    hwBuffer.baro = {
+                        pressure: data.pressure,
+                        relativeAltitude: data.relativeAltitude ?? 0
+                    };
                     lastBaroTime = Date.now();
                 }
             });

@@ -9,11 +9,15 @@ const BT_SIGNATURES = [
     { prefix: 'XGPS', brand: 'Dual', type: 'SPP_CLASSIC', model: 'XGPS160', vendor: 'GENERIC_NMEA' },
     { prefix: 'Bad Elf', brand: 'Bad Elf', type: 'SPP_CLASSIC', model: 'GNSS Surveyor', vendor: 'GENERIC_NMEA' },
     { prefix: 'Trimble', brand: 'Trimble', type: 'SPP_CLASSIC', model: 'R12', vendor: 'TRIMBLE' },
-    { prefix: 'Leica', brand: 'Leica', type: 'BLE_GATT', model: 'GS18', vendor: 'NOVATEL' }, // Leica often uses NovAtel OEM
+    { prefix: 'Leica', brand: 'Leica', type: 'BLE_GATT', model: 'GS18', vendor: 'NOVATEL' }, 
     { prefix: 'Reach', brand: 'Emlid', type: 'BLE_GATT', model: 'RS2+', vendor: 'U_BLOX' },
     { prefix: 'Topcon', brand: 'Topcon', type: 'SPP_CLASSIC', model: 'HiPer VR', vendor: 'NO_BRAND_CLONE' },
     { prefix: 'GNSS', brand: 'Generic', type: 'SPP_CLASSIC', model: 'NMEA Device', vendor: 'GENERIC_NMEA' },
-    { prefix: 'CHCNAV', brand: 'CHCNAV', type: 'BLE_GATT', model: 'i90', vendor: 'TRIMBLE' }
+    { prefix: 'CHCNAV', brand: 'CHCNAV', type: 'BLE_GATT', model: 'i90', vendor: 'TRIMBLE' },
+    { prefix: 'Spectra', brand: 'Spectra', type: 'SPP_CLASSIC', model: 'SP85', vendor: 'TRIMBLE' },
+    { prefix: 'Stonex', brand: 'Stonex', type: 'BLE_GATT', model: 'S900', vendor: 'HEMISPHERE' },
+    { prefix: 'Foif', brand: 'Foif', type: 'SPP_CLASSIC', model: 'A90', vendor: 'UNICORE' },
+    { prefix: 'South', brand: 'South', type: 'BLE_GATT', model: 'Galaxy G1', vendor: 'TRIMBLE' }
 ];
 
 class BluetoothGnssManager {

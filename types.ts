@@ -218,7 +218,7 @@ export interface NtripCaster {
     host: string;
     port: number;
     mountpoint: string;
-    region: 'ASIA' | 'EU' | 'NA' | 'SA' | 'AF' | 'OC' | 'GLOBAL'; 
+    region: 'ASIA' | 'EU' | 'NA' | 'SA' | 'AF' | 'OC' | 'GLOBAL' | 'LOCAL'; 
     country: string;
     lat: number;
     lon: number;
