@@ -1,0 +1,46 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>OmniGNSS Pro: Precision Core</title>
+    
+    <!-- LEGACY BROWSER POLYFILLS (Military Grade Backwards Compatibility) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/core-js/3.34.0/minified.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/regenerator-runtime/0.14.1/runtime.min.js"></script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react-native": "https://esm.sh/react-native@^0.84.0",
+        "react-native-svg": "https://esm.sh/react-native-svg@^15.15.3",
+        "expo-location": "https://esm.sh/expo-location@^19.0.8",
+        "expo-sensors": "https://esm.sh/expo-sensors@^15.0.8",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "react": "https://esm.sh/react@^19.2.4",
+        "expo-device": "https://esm.sh/expo-device@^8.0.10",
+        "expo-haptics": "https://esm.sh/expo-haptics@^15.0.8",
+        "expo-battery": "https://esm.sh/expo-battery@^8.0.0",
+        "expo": "https://esm.sh/expo@^54.0.33"
+      }
+    }
+    </script>
+    
+    <style>
+        /* TV & CAR DASHBOARD OPTIMIZATIONS */
+        body { background-color: #0f172a; overflow: hidden; }
+        #root { display: flex; flex: 1; height: 100vh; }
+        
+        /* Focus Ring for TV Remotes */
+        :focus {
+            outline: 2px solid #06b6d4;
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>

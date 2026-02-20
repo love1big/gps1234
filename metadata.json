@@ -1,0 +1,5 @@
+{
+  "name": "OmniGNSS Pro: Precision Core",
+  "description": "Professional-grade GNSS/INS Sensor Fusion Dashboard with Multi-Constellation tracking, RTK/PPK simulation capabilities, and advanced error mitigation pipelines.",
+  "requestFramePermissions": []
+}
