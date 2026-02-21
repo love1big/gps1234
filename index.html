@@ -9,10 +9,30 @@
     
     <!-- LEGACY BROWSER POLYFILLS REMOVED FOR OFFLINE COMPATIBILITY -->
     
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error(message, error);
+            var root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = '<div style="color:#ef4444; background:#0f172a; padding:20px; font-family:monospace; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center;">' +
+                    '<h1 style="font-size:24px; margin-bottom:10px;">SYSTEM CRASH</h1>' +
+                    '<p style="color:#fca5a5;">' + message + '</p>' +
+                    '<p style="color:#94a3b8; font-size:12px; margin-top:20px;">' + source + ':' + lineno + '</p>' +
+                '</div>';
+            }
+        };
+    </script>
+
     <style>
         /* TV & CAR DASHBOARD OPTIMIZATIONS */
-        body { background-color: #0f172a; overflow: hidden; }
-        #root { display: flex; flex: 1; height: 100vh; }
+        body { 
+            background-color: #0f172a; 
+            color: #ffffff;
+            overflow: hidden; 
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        #root { display: flex; flex: 1; height: 100vh; flex-direction: column; }
         
         /* Focus Ring for TV Remotes */
         :focus {
@@ -22,7 +42,11 @@
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #0f172a; color: #ffffff; font-family: monospace; font-size: 24px;">
+            INITIALIZING CORE SYSTEM...
+        </div>
+    </div>
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

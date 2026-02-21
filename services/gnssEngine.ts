@@ -383,10 +383,15 @@ export const generateSatellites = (
     
     const availableConstellations = Object.values(Constellation); 
 
-    if (scanState === 'TUNNEL_COASTING' || scanState === 'DEAD_RECKONING') {
+    if (scanState === 'TUNNEL_COASTING') {
         return { sats: [], scanState };
     }
 
+    // ENHANCED MULTI-CONSTELLATION DISTRIBUTION
+    // Ensure we cycle through ALL available constellations evenly
+    const stdConstellations = availableConstellations.filter(c => c !== Constellation.LEO && c !== Constellation.SBAS);
+    
+    // OPTIMIZATION: Object Reuse from Pool to reduce GC
     for (let i = 0; i < poolCount; i++) {
         const prn = (i * 3) % 32 + 1;
         
@@ -400,9 +405,9 @@ export const generateSatellites = (
         } else if (i % 20 === 19) {
             constellation = Constellation.SBAS; 
         } else {
-            // Cycle through standard GNSS
-            const stdConstellations = availableConstellations.filter(c => c !== Constellation.LEO && c !== Constellation.SBAS);
-            constellation = stdConstellations[i % stdConstellations.length];
+            // Balanced Round-Robin Distribution
+            const typeIndex = i % stdConstellations.length;
+            constellation = stdConstellations[typeIndex];
         }
 
         const ephKey = `${constellation}-${prn}`;
@@ -452,6 +457,7 @@ export const generateSatellites = (
 
         snr = Math.max(0, Math.min(60, snr));
 
+        // DIRECT MUTATION OF POOL OBJECT (No `new` allocation)
         const sat = satellitePool[i];
         sat.prn = prn;
         sat.constellation = constellation;
@@ -462,7 +468,18 @@ export const generateSatellites = (
         
         let elevationMask = 5; 
         let minSnr = 15;
-        if (config.operationMode === 'URBAN_CANYON') {
+
+        // "Under Expressway" / Signal Recovery Logic
+        if (isSignalLost || scanState.startsWith('SEARCHING') || scanState === 'DEAD_RECKONING') {
+            elevationMask = -5; 
+            minSnr = 8; 
+            
+            if (el > 60) {
+                snr -= 30; 
+            } else if (el < 40) {
+                snr += 5; 
+            }
+        } else if (config.operationMode === 'URBAN_CANYON') {
             elevationMask = 25; 
             minSnr = 30; 
         } else if (config.operationMode === 'PRECISE_SURVEY') {
@@ -474,11 +491,15 @@ export const generateSatellites = (
         sat.status = weatherStatus === 'tracking' ? (sat.usedInFix ? 'tracking' : 'multipath_rejected') : weatherStatus;
         sat.source = isExternal ? 'EXTERNAL_USB' : 'INTERNAL';
 
+        if (!sat.sbasCorrections) {
+            sat.sbasCorrections = { fast: 0, longTerm: 0, iono: 0, rangeRate: 0, wetDelay: 0 };
+        }
+
         if (constellation === Constellation.SBAS) {
-            sat.sbasCorrections = { fast: 0, longTerm: 0, iono: 1.5, rangeRate: 0, wetDelay: 0 };
+            sat.sbasCorrections.iono = 1.5;
         } else {
             const tropo = calculateTroposphericDelay(el, 15);
-            sat.sbasCorrections = { fast: 0, longTerm: 0, iono: tropo, rangeRate: 0, wetDelay: 0 };
+            sat.sbasCorrections.iono = tropo;
         }
 
         const supportsL5 = (constellation === Constellation.GPS && prn > 10) || 
@@ -486,9 +507,14 @@ export const generateSatellites = (
                            (constellation === Constellation.BEIDOU) ||
                            (constellation === Constellation.QZSS);
         sat.hasL5 = config.dualFrequencyMode && supportsL5 && (i % 3 !== 0); 
+        
+        // PUSH REFERENCE (Zero Allocation)
         ACTIVE_SATELLITES_BUFFER.push(sat);
     }
     
+    // Sort satellites by SNR to prioritize strong signals
+    ACTIVE_SATELLITES_BUFFER.sort((a, b) => b.snr - a.snr);
+
     return { sats: ACTIVE_SATELLITES_BUFFER, scanState };
 };
 

@@ -53,6 +53,9 @@ export const updateMotionState = (isMoving: boolean, dt: number) => {
 };
 
 export const monitorPerformance = (loopDurationMs: number): ResourceState => {
+    // MIL-SPEC: Sanitize Input
+    const safeDuration = Number.isFinite(loopDurationMs) ? loopDurationMs : 16.0;
+
     // 1. Determine Target based on Motion State
     let target = TARGET_MS_BALANCED;
     
@@ -69,7 +72,7 @@ export const monitorPerformance = (loopDurationMs: number): ResourceState => {
         currentLOD = 'FULL';
     }
 
-    const error = loopDurationMs - target;
+    const error = safeDuration - target;
     
     integral += error;
     integral = Math.max(-200, Math.min(200, integral));
@@ -80,7 +83,7 @@ export const monitorPerformance = (loopDurationMs: number): ResourceState => {
     const pidOutput = (Kp * error) + (Ki * integral) + (Kd * derivative);
 
     // 2. Thermal Throttling
-    loadHistory[historyHead] = loopDurationMs;
+    loadHistory[historyHead] = safeDuration;
     historyHead = (historyHead + 1) % LOAD_HISTORY_SIZE;
     
     if (historyHead % 20 === 0) { 
@@ -115,10 +118,10 @@ export const monitorPerformance = (loopDurationMs: number): ResourceState => {
     }
     
     let memStatus: 'NORMAL' | 'HIGH' | 'CRITICAL' = 'NORMAL';
-    if (loopDurationMs > 150) memStatus = 'CRITICAL'; 
-    else if (loopDurationMs > 50) memStatus = 'HIGH';
+    if (safeDuration > 150) memStatus = 'CRITICAL'; 
+    else if (safeDuration > 50) memStatus = 'HIGH';
 
-    const fps = Math.min(60, 1000 / Math.max(16.67, loopDurationMs));
+    const fps = Math.min(60, 1000 / Math.max(16.67, safeDuration));
 
     return {
         loadLevel: Math.max(0, Math.min(100, 50 + effectivePressure)), 

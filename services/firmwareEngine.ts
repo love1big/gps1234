@@ -154,6 +154,71 @@ const GLOBAL_FIRMWARE_REPO: Record<string, FirmwareMetadata> = {
         targetHwId: 'INTERNAL',
         minBatteryLevel: 0.15,
         restartRequired: false 
+    },
+    // BROADCOM (BCM47755 / BCM47765)
+    'BCM_47755': {
+        version: 'BCM_L5_2.1',
+        buildDate: 1765000000000,
+        sizeBytes: 1024000,
+        checksumCrc32: 'BCM47755',
+        downloadUrl: 'https://broadcom.com/support/gnss/bcm47755_v2.1.bin',
+        criticality: 'RECOMMENDED',
+        releaseNotes: 'Improved multipath mitigation in urban canyons.',
+        targetHwId: 'BCM_47755',
+        minBatteryLevel: 0.20,
+        restartRequired: true
+    },
+    // MEDIATEK (MT3333 / MT3339)
+    'MTK_3333': {
+        version: 'MTK_AX_3.0',
+        buildDate: 1755000000000,
+        sizeBytes: 512000,
+        checksumCrc32: 'MTK3333',
+        downloadUrl: 'https://mediatek.com/drivers/gnss/mt3333_v3.bin',
+        criticality: 'OPTIONAL',
+        releaseNotes: 'Faster TTFF for cold starts.',
+        targetHwId: 'MTK_3333',
+        minBatteryLevel: 0.15,
+        restartRequired: true
+    },
+    // STMICRO (TESE0 / TESEO-LIV3F)
+    'STM_TESEO': {
+        version: 'TESEO_4.5',
+        buildDate: 1770000000000,
+        sizeBytes: 2048000,
+        checksumCrc32: 'STM4500',
+        downloadUrl: 'https://st.com/gnss/teseo/fw_4.5.bin',
+        criticality: 'RECOMMENDED',
+        releaseNotes: 'Added support for NavIC constellation.',
+        targetHwId: 'STM_TESEO',
+        minBatteryLevel: 0.25,
+        restartRequired: true
+    },
+    // FURUNO (GN-87)
+    'FURUNO_GN87': {
+        version: 'GN87_1.2',
+        buildDate: 1762000000000,
+        sizeBytes: 768000,
+        checksumCrc32: 'FUR8712',
+        downloadUrl: 'https://furuno.com/gnss/gn87_v1.2.bin',
+        criticality: 'OPTIONAL',
+        releaseNotes: 'Timing accuracy improvements.',
+        targetHwId: 'FURUNO_GN87',
+        minBatteryLevel: 0.20,
+        restartRequired: true
+    },
+    // GENERIC USB (Prolific / CP210x)
+    'USB_GENERIC': {
+        version: 'USB_SERIAL_2.4',
+        buildDate: 1740000000000,
+        sizeBytes: 64000,
+        checksumCrc32: 'USBGEN24',
+        downloadUrl: 'https://drivers.usb/serial/v2.4.bin',
+        criticality: 'RECOMMENDED',
+        releaseNotes: 'Stability fix for high baud rates (115200+).',
+        targetHwId: 'USB_GENERIC',
+        minBatteryLevel: 0.10,
+        restartRequired: true
     }
 };
 
@@ -219,8 +284,13 @@ export class FirmwareEngine {
             else if (identity.vendor === 'GARMIN') match = GLOBAL_FIRMWARE_REPO['GARMIN_GLO'];
             else if (identity.vendor === 'HEMISPHERE') match = GLOBAL_FIRMWARE_REPO['HEMI_P40'];
             else if (identity.vendor === 'SKYTRAQ') match = GLOBAL_FIRMWARE_REPO['SKY_PX1122'];
+            else if (identity.vendor === 'BROADCOM') match = GLOBAL_FIRMWARE_REPO['BCM_47755'];
+            else if (identity.vendor === 'MEDIATEK') match = GLOBAL_FIRMWARE_REPO['MTK_3333'];
+            else if (identity.vendor === 'STMICRO') match = GLOBAL_FIRMWARE_REPO['STM_TESEO'];
+            else if (identity.vendor === 'FURUNO') match = GLOBAL_FIRMWARE_REPO['FURUNO_GN87'];
             else if (identity.vendor === 'GENERIC_NMEA' || identity.vendor === 'NO_BRAND_CLONE') match = GLOBAL_FIRMWARE_REPO['GENERIC_001'];
             else if (identity.connectionInterface === 'INTERNAL_BUS') match = GLOBAL_FIRMWARE_REPO['INTERNAL'];
+            else if (identity.connectionInterface === 'USB_OTG') match = GLOBAL_FIRMWARE_REPO['USB_GENERIC'];
         }
 
         if (match && match.version !== identity.currentFirmware) {

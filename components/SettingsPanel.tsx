@@ -8,6 +8,7 @@ import { FirmwareManager } from '../services/firmwareEngine';
 import { ExternalWifiManager } from '../services/wifiDrivers';
 import { NavBridge } from '../services/universalNavBridge';
 import { BluetoothManager } from '../services/bluetoothGnss';
+import { NtripClient } from '../services/ntripClient'; // NEW
 
 interface Props {
   config: GNSSConfig;
@@ -144,11 +145,13 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
   const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([]);
   const [connectedBt, setConnectedBt] = useState<BluetoothDevice | null>(null);
   const [availableNavApps, setAvailableNavApps] = useState<NavAppProfile[]>([]);
+  const [ntripStatus, setNtripStatus] = useState<{ connected: boolean, caster: any, bytes: number }>({ connected: false, caster: null, bytes: 0 });
 
   useEffect(() => {
       Battery.getBatteryLevelAsync().then(setBatteryLevel);
       const wifiTimer = setInterval(() => {
           setWifiAdapter(ExternalWifiManager.getAdapterStatus());
+          setNtripStatus(NtripClient.getStatus());
       }, 2000);
       setAvailableNavApps(NavBridge.getSupportedApps());
       return () => clearInterval(wifiTimer);
@@ -241,6 +244,20 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
       await NavBridge.launchApp(appId, position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
   };
 
+  const handleNtripConnect = async () => {
+      if (ntripStatus.connected) {
+          NtripClient.disconnect((msg) => setLogs(p => [...p.slice(-2), msg]));
+          return;
+      }
+      
+      const caster = await NtripClient.findNearestCaster(position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
+      if (caster) {
+          await NtripClient.connect(caster, (msg) => setLogs(p => [...p.slice(-2), msg]), (data) => {
+              // In real app, inject to GNSS engine here
+          });
+      }
+  };
+
   return (
     <View style={styles.container}>
       
@@ -315,6 +332,34 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
           </TouchableOpacity>
       </View>
 
+      {/* NTRIP CORRECTION CLIENT CARD */}
+      <View style={[styles.deviceCard, { borderColor: '#22c55e' }]}>
+          <Text style={[styles.deviceLabel, { color: '#86efac', marginBottom: 8 }]}>NTRIP RTK CORRECTIONS</Text>
+          {ntripStatus.connected ? (
+               <>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>CASTER:</Text>
+                    <Text style={styles.deviceValue}>{ntripStatus.caster?.mountpoint}</Text>
+                </View>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>HOST:</Text>
+                    <Text style={styles.deviceValue}>{ntripStatus.caster?.host}</Text>
+                </View>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>DATA:</Text>
+                    <Text style={styles.deviceValue}>{(ntripStatus.bytes / 1024).toFixed(1)} KB</Text>
+                </View>
+                <TouchableOpacity style={[styles.flashBtn, { backgroundColor: '#dc2626' }]} onPress={handleNtripConnect}>
+                    <Text style={styles.flashText}>DISCONNECT STREAM</Text>
+                </TouchableOpacity>
+               </>
+          ) : (
+             <TouchableOpacity style={[styles.checkBtn, { borderColor: '#22c55e' }]} onPress={handleNtripConnect}>
+                <Text style={[styles.checkText, { color: '#4ade80' }]}>AUTO-CONNECT NEAREST BASE</Text>
+             </TouchableOpacity>
+          )}
+      </View>
+
       {/* EXTERNAL WI-FI CARD */}
       <View style={[styles.deviceCard, { borderColor: '#8b5cf6' }]}>
           <Text style={[styles.deviceLabel, { color: '#a78bfa', marginBottom: 8 }]}>EXTERNAL CONNECTIVITY (USB/PCI)</Text>
@@ -360,6 +405,16 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
           {logs.length > 0 && (
               <View style={styles.miniLog}>
                   {logs.map((l, i) => <Text key={i} style={styles.logText}>{l}</Text>)}
+              </View>
+          )}
+
+          {fwUpdateAvailable && !isUpdating && (
+              <View style={styles.releaseNotesBox}>
+                  <Text style={styles.releaseNotesTitle}>NEW VERSION AVAILABLE</Text>
+                  <Text style={styles.releaseNotesText}>{fwUpdateAvailable.releaseNotes}</Text>
+                  <Text style={styles.releaseNotesMeta}>
+                      Ver: {fwUpdateAvailable.version} • Size: {(fwUpdateAvailable.sizeBytes / 1024).toFixed(0)}KB
+                  </Text>
               </View>
           )}
 
@@ -506,6 +561,30 @@ const styles = StyleSheet.create({
   },
   logText: {
       color: '#22c55e',
+      fontSize: 9,
+      fontFamily: 'monospace'
+  },
+  releaseNotesBox: {
+      marginTop: 10,
+      backgroundColor: '#1e293b',
+      padding: 10,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#475569'
+  },
+  releaseNotesTitle: {
+      color: '#fbbf24',
+      fontSize: 10,
+      fontWeight: 'bold',
+      marginBottom: 4
+  },
+  releaseNotesText: {
+      color: '#e2e8f0',
+      fontSize: 10,
+      marginBottom: 6
+  },
+  releaseNotesMeta: {
+      color: '#94a3b8',
       fontSize: 9,
       fontFamily: 'monospace'
   },

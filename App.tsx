@@ -11,6 +11,7 @@ import { SystemInjector } from './services/mockLocationService';
 import { simulateUsbIngest, UsbDriver } from './services/usbDrivers';
 import { ExternalWifiManager } from './services/wifiDrivers'; // NEW
 import { BluetoothManager } from './services/bluetoothGnss'; // NEW
+import { sanitizePosition } from './services/dataSanitizer'; // MIL-SPEC SANITIZER
 import { INITIAL_POSITION } from './constants';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
@@ -242,6 +243,7 @@ export default function App() {
 
   const startEngine = () => {
       if (engineTimerRef.current) clearTimeout(engineTimerRef.current);
+      if (hardwareWatchdogRef.current) clearInterval(hardwareWatchdogRef.current);
       
       engineTimerRef.current = setTimeout(runEngineCycle, 100);
       subscribeToHardware('HIGH'); // Default to HIGH
@@ -360,7 +362,7 @@ export default function App() {
 
                   // OPTIMIZATION: BATCHED UPDATE
                   setDashboard({
-                      position: { ...positionRef.current },
+                      position: sanitizePosition({ ...positionRef.current }),
                       imu: internalResult.imu,
                       sensorStatus: internalResult.sensorStatus,
                       network: calculateNetworkStats(configRef.current),
@@ -483,7 +485,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#0f172a" translucent={true} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
             
@@ -567,7 +569,7 @@ export default function App() {
             
             <View style={{height: 40}} />
         </ScrollView>
-        </SafeAreaView>
+        </View>
     </ErrorBoundary>
   );
 }

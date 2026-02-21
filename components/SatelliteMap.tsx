@@ -34,7 +34,21 @@ const SkyplotBackground = memo(({ size, simple }: { size: number, simple: boolea
     );
 });
 
-const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 48, complexity = 'FULL' }) => {
+const getSatPrefix = (c: string) => {
+    switch (c) {
+        case 'GPS': return 'G';
+        case 'GLONASS': return 'R';
+        case 'GALILEO': return 'E';
+        case 'BEIDOU': return 'B';
+        case 'QZSS': return 'Q';
+        case 'NAVIC': return 'I';
+        case 'SBAS': return 'S';
+        case 'LEO_SAT': return 'L';
+        default: return c.charAt(0);
+    }
+};
+
+const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 48, complexity = 'FULL', renderTrigger }) => {
   const size = 300;
   const radius = size / 2 - 10;
   const center = size / 2;
@@ -49,9 +63,13 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
       );
   }
 
-  const renderList = satellites
-    .sort((a, b) => (b.usedInFix ? 1 : 0) - (a.usedInFix ? 1 : 0) || (b.displaySnr || b.snr) - (a.displaySnr || a.snr))
-    .slice(0, limitCount);
+  // OPTIMIZATION: Memoize the sorted list to prevent re-sorting on every heading update
+  const renderList = React.useMemo(() => {
+      return satellites
+        .filter(s => !isNaN(s.azimuth) && !isNaN(s.elevation) && isFinite(s.azimuth) && isFinite(s.elevation))
+        .sort((a, b) => (b.usedInFix ? 1 : 0) - (a.usedInFix ? 1 : 0) || (b.displaySnr || b.snr) - (a.displaySnr || a.snr))
+        .slice(0, limitCount);
+  }, [satellites, limitCount, renderTrigger]); // Only re-sort when data actually changes
 
   const getR = (el: number) => radius * (1 - el / 90);
   const isSimple = complexity === 'MINIMAL';
@@ -63,29 +81,23 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
         <Svg height={size} width={size}>
           <G origin={`${center}, ${center}`} rotation={isNaN(heading) ? 0 : -heading}>
              <SkyplotBackground size={size} simple={isSimple} />
-             {renderList.map((sat, i) => {
+             {renderList.map((sat) => {
+                // OPTIMIZATION: Pre-calculate coordinates
                 const theta = (sat.azimuth - 90) * (Math.PI / 180);
                 const r = getR(sat.elevation);
                 let x = center + r * Math.cos(theta);
                 let y = center + r * Math.sin(theta);
                 
-                if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) {
-                    x = center;
-                    y = center;
-                }
+                // Safety clamp
+                if (isNaN(x) || isNaN(y)) { x = center; y = center; }
 
                 const color = CONSTELLATION_COLORS[sat.constellation] || '#fff';
                 const isLocked = sat.usedInFix;
-                
-                if (complexity === 'MINIMAL') {
-                    return <Circle key={i} cx={x} cy={y} r="3" fill={isLocked ? color : '#334155'} />;
-                }
-
                 const strokeColor = isLocked ? '#fff' : color;
                 
                 return (
                   <G key={`${sat.constellation}-${sat.prn}`}>
-                    {isLocked && complexity === 'FULL' && <Circle cx={x} cy={y} r="10" fill={color} opacity="0.15" />}
+                    {/* Glow effect REMOVED for performance unless ULTRA mode (not implemented yet) */}
                     
                     <Circle 
                         cx={x} cy={y} 
@@ -95,15 +107,18 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
                         strokeWidth={isLocked ? 1.5 : 1} 
                     />
                     
-                    {(complexity === 'FULL' || (complexity === 'REDUCED' && isLocked)) && (
+                    {/* Text rendering is expensive. Only show for locked sats or if list is small */}
+                    {(isLocked || renderList.length < 20) && (
                         <G x={x} y={y} origin={`${x}, ${y}`} rotation={heading}>
                             <SvgText 
                                 x={x + 7} y={y + 4} 
-                                fill={isLocked ? "#e2e8f0" : "#64748b"} 
-                                fontSize={isLocked ? "10" : "8"} 
+                                fill={isLocked ? "#ffffff" : "#cbd5e1"} 
+                                fontSize={isLocked ? "11" : "9"} 
                                 fontWeight="bold"
+                                stroke="#0f172a"
+                                strokeWidth="3"
                             >
-                            {sat.constellation === 'GPS' ? '' : sat.constellation[0]}{sat.prn}
+                            {getSatPrefix(sat.constellation)}{sat.prn}
                             </SvgText>
                         </G>
                     )}
@@ -128,12 +143,9 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
 }, (prev, next) => {
     // MIL-SPEC RENDER GUARD:
     // Only re-render if the timestamp changes OR LOD changes.
-    // The App.tsx now controls the `renderTrigger` exactly when data is ready.
-    // We also ignore heading changes smaller than 2 degrees to prevent jitter-rendering.
     const headingChange = Math.abs(prev.heading - next.heading);
-    const significantHeading = headingChange > 2;
+    const significantHeading = headingChange > 5; // Increased threshold to 5 degrees for stability
     
-    // If trigger hasn't fired and heading is stable, DO NOT RENDER.
     if (prev.renderTrigger === next.renderTrigger && !significantHeading && prev.complexity === next.complexity) {
         return true; 
     }

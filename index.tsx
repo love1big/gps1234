@@ -1,7 +1,11 @@
-import { registerRootComponent } from 'expo';
+import { AppRegistry } from 'react-native';
+import './src/index.css';
 import App from './App';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+// Explicitly register and run the application for web
+AppRegistry.registerComponent('App', () => App);
+
+AppRegistry.runApplication('App', {
+  initialProps: {},
+  rootTag: document.getElementById('root'),
+});
