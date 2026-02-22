@@ -20,6 +20,7 @@ interface Props {
   position: PositionData;
   usbConnected?: boolean;
   usbStatus?: UsbDeviceStatus; 
+  onNtripData?: (data: any) => void;
 }
 
 const safeHaptics = {
@@ -131,7 +132,7 @@ const WeatherSelector = ({ current, onSelect }: { current: WeatherCondition, onS
     );
 };
 
-const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUpdate, onSensorPulse, onOpenMaps, onShareLocation, usbStatus, position }) => {
+const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUpdate, onSensorPulse, onOpenMaps, onShareLocation, usbStatus, position, onNtripData }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [fwUpdateAvailable, setFwUpdateAvailable] = useState<FirmwareMetadata | null>(null);
   const [flashProgress, setFlashProgress] = useState(0);
@@ -204,7 +205,12 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
               setIsUpdating(false);
               setFwUpdateAvailable(null);
               setLogs(p => [...p, success ? 'REBOOTING SYSTEM...' : 'SAFE ROLLBACK COMPLETED']);
-              if(success) safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if(success) {
+                  safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  // --- MILITARY GRADE SENSOR RESTART ---
+                  onSensorPulse(); // Trigger a pulse to reset sensor states
+                  setLogs(p => [...p, 'SENSORS REINITIALIZED']);
+              }
               else safeHaptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
       );
@@ -253,7 +259,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
       const caster = await NtripClient.findNearestCaster(position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
       if (caster) {
           await NtripClient.connect(caster, (msg) => setLogs(p => [...p.slice(-2), msg]), (data) => {
-              // In real app, inject to GNSS engine here
+              if (onNtripData) onNtripData(data);
           });
       }
   };

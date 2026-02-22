@@ -86,7 +86,7 @@ export class NtripManager {
             return GLOBAL_CASTER_REGISTRY.find(c => c.region === 'GLOBAL') || null;
         }
 
-        onLog(`Nearest Base Station: ${bestCaster.id} (${minDistance.toFixed(1)}km)`);
+        onLog(`Nearest Base Station: ${(bestCaster as NtripCaster).id} (${minDistance.toFixed(1)}km)`);
         return bestCaster;
     }
 

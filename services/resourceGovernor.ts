@@ -35,16 +35,21 @@ let currentLOD: ResourceState['renderComplexity'] = 'FULL';
 export const updateMotionState = (isMoving: boolean, dt: number) => {
     if (!isMoving) {
         staticDuration += dt;
-        if (staticDuration > 30000) { // 30 seconds of stillness -> Deep Sleep
+        // --- MILITARY GRADE POWER SAVING ---
+        // Enter deep sleep much faster if absolutely static
+        if (staticDuration > 15000) { // 15 seconds of stillness -> Deep Sleep
             isDeepSleep = true;
             isSilentWatch = true;
-        } else if (staticDuration > 5000) { // 5 seconds -> Silent Watch
+        } else if (staticDuration > 3000) { // 3 seconds -> Silent Watch
             isSilentWatch = true;
         }
     } else {
         // INSTANT WAKE PROTOCOL
-        if (isDeepSleep) {
-            // Log wake event in real system
+        if (isDeepSleep || isSilentWatch) {
+            // Force immediate reset of PID controllers to prevent lag on wake
+            integral = 0;
+            prevError = 0;
+            thermalScore = Math.max(0, thermalScore - 10); // Cool down assumption
         }
         staticDuration = 0;
         isSilentWatch = false;

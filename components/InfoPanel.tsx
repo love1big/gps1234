@@ -45,7 +45,7 @@ const SensorBadge = ({ name, status }: { name: string, status: string }) => {
     );
 };
 
-const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus }) => {
+const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbStatus }) => {
   const safeFixed = (val: number | undefined | null, digits: number) => {
       if (typeof val !== 'number') return '-';
       return val.toFixed(digits);
@@ -126,6 +126,14 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus }) =>
           <StatBox label="Reflect Idx" value={(position.rfMultipathIndex || 0).toFixed(2)} unit="" color={(position.rfMultipathIndex || 0) > 0.5 ? '#f87171' : '#4ade80'} width="30%" />
           <StatBox label="H.A.R.P." value={(position.rfAnchorsUsed || 0) > 0 ? "ON" : "OFF"} unit="" color="#c084fc" width="30%" />
       </View>
+
+      {/* NTRIP / CORRECTIONS */}
+      {position.rtkStatus !== 'NONE' && (
+          <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+              <StatBox label="NTRIP" value={position.rtkStatus} unit="" color={rtkColor} width="48%" />
+              <StatBox label="Age" value={safeFixed(position.correctionAge || 0, 1)} unit="s" color="#a3e635" width="48%" />
+          </View>
+      )}
 
       {/* NETWORK */}
       {network && (

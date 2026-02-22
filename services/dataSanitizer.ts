@@ -53,5 +53,6 @@ export const sanitizePosition = (pos: any): any => {
         hdop: sanitizeValue(pos.hdop, 1),
         vdop: sanitizeValue(pos.vdop, 1),
         pdop: sanitizeValue(pos.pdop, 1),
+        gdop: sanitizeValue(pos.gdop, 1),
     };
 };

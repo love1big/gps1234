@@ -1,7 +1,7 @@
 import React, { Component, useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, ScrollView, SafeAreaView, StatusBar, Platform, Linking, AppState, Share, TouchableOpacity, Alert } from 'react-native';
 import { Satellite, PositionData, GNSSConfig, LogEntry, IMUData, NetworkStats, SensorStatus, UsbDeviceStatus, ResourceState, InjectionStatus } from './types';
-import { generateSatellites, calculatePosition, injectEphemerisData, recalculateOrbits, flushEngineBuffers, emergencyShutdown } from './services/gnssEngine';
+import { generateSatellites, calculatePosition, injectEphemerisData, recalculateOrbits, flushEngineBuffers, emergencyShutdown, injectRtcmData } from './services/gnssEngine';
 import { calculateNetworkStats } from './services/networkOptimizer';
 import { initSensorListeners, triggerSensorPulse, stopSensorListeners, setSensorPowerProfile } from './services/sensorManager';
 import { downloadAndMergeAGPS } from './services/agpsManager';
@@ -11,6 +11,7 @@ import { SystemInjector } from './services/mockLocationService';
 import { simulateUsbIngest, UsbDriver } from './services/usbDrivers';
 import { ExternalWifiManager } from './services/wifiDrivers'; // NEW
 import { BluetoothManager } from './services/bluetoothGnss'; // NEW
+import { NtripClient } from './services/ntripClient'; // NEW
 import { sanitizePosition } from './services/dataSanitizer'; // MIL-SPEC SANITIZER
 import { INITIAL_POSITION } from './constants';
 import * as Location from 'expo-location';
@@ -311,6 +312,13 @@ export default function App() {
       }
 
       try {
+          // --- MILITARY GRADE THERMAL PROTECTION ---
+          if (resourceState.thermalThrottling) {
+              nextDelay = Math.max(nextDelay, 5000); // Force at least 5s delay to cool down
+              powerProfile = 'ULTRA_LOW';
+              if (Math.random() < 0.1) addLog('SYS', 'THERMAL THROTTLING ACTIVE - COOLING DOWN', 'warn');
+          }
+
           const targetSats = isBackground ? 8 : 24;
           const genResult = generateSatellites(targetSats + 4, configRef.current, configRef.current.boostInternal, powerProfile === 'LOW_POWER' || powerProfile === 'ULTRA_LOW', false, undefined, isBackground);
           
@@ -565,6 +573,7 @@ export default function App() {
                 position={dashboard.position}
                 usbConnected={dashboard.usbStatus.connected} 
                 usbStatus={dashboard.usbStatus} 
+                onNtripData={injectRtcmData}
             />
             
             <View style={{height: 40}} />

@@ -194,7 +194,7 @@ class UniversalDriverCore {
     // --- HARDWARE RESPONSE SIMULATOR ---
     private simulateHardwareResponse(cmd: Uint8Array) {
         const cmdStr = String.fromCharCode.apply(null, Array.from(cmd));
-        const seed = Date.now() % 8; // Increased seed range
+        const seed = Date.now() % 12; // Expanded seed range
 
         setTimeout(() => {
             if (cmd[0] === 0xB5 && seed === 0) { 
@@ -213,6 +213,14 @@ class UniversalDriverCore {
                 this.setIdentity('SKYTRAQ', 'PX1122R', 'SKY_PX1122', '2025.10.15', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: false, lband: false });
             } else if (seed === 7) {
                 this.setIdentity('SEPTENTRIO', 'Mosaic-X5', 'SEPT_MOS', '5.0.1', { dualBand: true, rtk: true, rawMeas: true, imuIntegrated: false, ppp: true, lband: true });
+            } else if (seed === 8) {
+                this.setIdentity('BROADCOM', 'BCM47755', 'BCM_47755', 'BCM_L5_2.1', { dualBand: true, rtk: false, rawMeas: true, imuIntegrated: true, ppp: false, lband: false });
+            } else if (seed === 9) {
+                this.setIdentity('STMICRO', 'Teseo-LIV3F', 'STM_TESEO', 'TESEO_4.5', { dualBand: false, rtk: false, rawMeas: true, imuIntegrated: false, ppp: false, lband: false });
+            } else if (seed === 10) {
+                this.setIdentity('FURUNO', 'GN-87', 'FURUNO_GN87', 'GN87_1.2', { dualBand: false, rtk: false, rawMeas: false, imuIntegrated: false, ppp: false, lband: false });
+            } else {
+                this.setIdentity('GENERIC_NMEA', 'USB Serial GPS', 'USB_GENERIC', 'USB_SERIAL_2.4', { dualBand: false, rtk: false, rawMeas: false, imuIntegrated: false, ppp: false, lband: false });
             }
         }, 150);
     }

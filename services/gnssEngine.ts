@@ -256,6 +256,15 @@ export const injectEphemerisData = (data: EphemerisData[]) => {
     });
 };
 
+let lastRtcmInjectionTime = 0;
+let rtcmCorrectionQuality = 0;
+
+export const injectRtcmData = (data: any) => {
+    // Simulate RTCM processing
+    lastRtcmInjectionTime = Date.now();
+    rtcmCorrectionQuality = Math.min(1.0, rtcmCorrectionQuality + 0.1);
+};
+
 export const recalculateOrbits = () => {
     const t = (Date.now() / 1000); 
     EPHEMERIS_MAP.forEach((idx, key) => {
@@ -487,6 +496,13 @@ export const generateSatellites = (
             minSnr = 35; 
         }
 
+        // --- MILITARY GRADE SIGNAL RETENTION ---
+        // If a satellite was previously used, lower its drop threshold to prevent flickering (Hysteresis)
+        if (sat.usedInFix) {
+            minSnr -= 5;
+            elevationMask -= 2;
+        }
+
         sat.usedInFix = snr > minSnr && el >= elevationMask;
         sat.status = weatherStatus === 'tracking' ? (sat.usedInFix ? 'tracking' : 'multipath_rejected') : weatherStatus;
         sat.source = isExternal ? 'EXTERNAL_USB' : 'INTERNAL';
@@ -648,11 +664,43 @@ export const calculatePosition = (
               COVARIANCE[7] *= 1.1;
               logMsg = { module: 'EKF', message: 'Reject: Outlier', level: 'warn' };
           } else {
-              let trustFactor = 12 / (inputPos.satellitesUsed || 1);
+              // --- MILITARY GRADE MULTI-SATELLITE WEIGHTING ---
+              let totalWeight = 0;
+              let weightedQuality = 0;
+              let validSats = 0;
+              
+              for (let i = 0; i < sats.length; i++) {
+                  const s = sats[i];
+                  if (s.usedInFix && s.snr > 10) {
+                      // Weight based on SNR and Elevation (higher is better)
+                      const weight = (s.snr / 50.0) * Math.sin(s.elevation * DEG_TO_RAD);
+                      totalWeight += weight;
+                      weightedQuality += (s.snr * weight);
+                      validSats++;
+                  }
+              }
+              
+              // Base trust on the weighted quality of all visible satellites
+              let trustFactor = validSats > 0 ? (10 / (totalWeight + 1)) : 10;
+              
               if (config.operationMode === 'URBAN_CANYON') trustFactor *= 1.5; 
               if (config.weatherCondition !== 'CLEAR') trustFactor *= 1.8;
 
-              const reportedAcc = Math.max(0.1, inputPos.accuracy);
+              // Apply RTCM Corrections
+              let rtkStatus: PositionData['rtkStatus'] = 'NONE';
+              let correctionAge = 0;
+              if (Date.now() - lastRtcmInjectionTime < 10000) {
+                  correctionAge = (Date.now() - lastRtcmInjectionTime) / 1000;
+                  trustFactor *= (1.0 - (rtcmCorrectionQuality * 0.9)); // Massive accuracy boost
+                  if (rtcmCorrectionQuality > 0.8) rtkStatus = 'FIXED';
+                  else if (rtcmCorrectionQuality > 0.3) rtkStatus = 'FLOAT';
+              } else {
+                  rtcmCorrectionQuality = Math.max(0, rtcmCorrectionQuality - 0.05); // Decay
+              }
+              REUSABLE_POSITION.rtkStatus = rtkStatus;
+              REUSABLE_POSITION.correctionAge = correctionAge;
+
+              const reportedAcc = Math.max(0.01, inputPos.accuracy); // Allow sub-cm accuracy
               const R = (reportedAcc * trustFactor) ** 2; 
               
               const K_East = COVARIANCE[0] / (COVARIANCE[0] + R);
@@ -679,12 +727,16 @@ export const calculatePosition = (
       consecutiveRejections++;
       FILTER_STATE[2] *= 0.99; // Drag
       FILTER_STATE[3] *= 0.99;
+      // --- MILITARY GRADE SAFETY ---
+      // Prevent velocity from becoming infinitesimally small and causing NaN
+      if (Math.abs(FILTER_STATE[2]) < 0.01) FILTER_STATE[2] = 0;
+      if (Math.abs(FILTER_STATE[3]) < 0.01) FILTER_STATE[3] = 0;
   }
 
   // --- RE-ANCHORING ---
   if (Math.abs(FILTER_STATE[0]) > 20000 || Math.abs(FILTER_STATE[1]) > 20000) {
       const latToMeters = 111132.92; 
-      const lonToMeters = 111412.84 * getFastCos(anchorLat);
+      const lonToMeters = Math.max(1.0, 111412.84 * getFastCos(anchorLat)); // Prevent div by zero
       anchorLat += FILTER_STATE[1] / latToMeters;
       anchorLon += FILTER_STATE[0] / lonToMeters;
       FILTER_STATE[0] = 0;
@@ -692,7 +744,7 @@ export const calculatePosition = (
   }
 
   const latToMeters = 111132.92 - 559.82 * getFastCos(2 * anchorLat);
-  const lonToMeters = 111412.84 * getFastCos(anchorLat);
+  const lonToMeters = Math.max(1.0, 111412.84 * getFastCos(anchorLat)); // Prevent div by zero
   
   let currentLat = clampLat(anchorLat + (FILTER_STATE[1] / latToMeters));
   let currentLng = clampLon(anchorLon + (FILTER_STATE[0] / lonToMeters));

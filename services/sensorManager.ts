@@ -181,7 +181,7 @@ const startWatchdog = () => {
         if (now - lastAccelTime > timeout && subAccel) {
             // Only restart if we expect data but aren't getting it
             stopSensorListeners();
-            setTimeout(() => initSensorListeners(false), 500);
+            setTimeout(() => initSensorListeners(currentProfile === 'BALANCED'), 500);
         }
     }, 30000);
 };
@@ -212,7 +212,8 @@ export const stopSensorListeners = () => {
 
 export const triggerSensorPulse = async (): Promise<boolean> => {
     stopSensorListeners();
-    setTimeout(() => initSensorListeners(), 200);
+    // Use a slightly longer delay to ensure hardware releases the resource
+    setTimeout(() => initSensorListeners(currentProfile === 'BALANCED'), 500);
     return true;
 };
 
@@ -234,6 +235,13 @@ const detectActivityFromSensors = (): ActivityState => {
     if (variance >= 0.05) return 'WALKING'; 
     
     return 'UNKNOWN';
+};
+
+const REUSABLE_IMU: IMUData = {
+    accelX: 0, accelY: 0, accelZ: 0,
+    gyroX: 0, gyroY: 0, gyroZ: 0,
+    magX: 0, magY: 0, magZ: 0,
+    pressure: 1013.25, stepCount: 0, source: 'VIRTUAL'
 };
 
 export const getSensorFusionData = (gpsPos: PositionData, dtMs: number, autoDriveEnabled: boolean): { data: IMUData, status: SensorStatus, activity: ActivityState } => {
@@ -260,40 +268,41 @@ export const getSensorFusionData = (gpsPos: PositionData, dtMs: number, autoDriv
 
   detectedActivity = detectActivityFromSensors();
 
-  const integratedAccel = { x: hwBuffer.accel.x, y: hwBuffer.accel.y, z: hwBuffer.accel.z };
-  const integratedGyro = { x: hwBuffer.gyro.x, y: hwBuffer.gyro.y, z: hwBuffer.gyro.z };
+  let intAccelX = hwBuffer.accel.x;
+  let intAccelY = hwBuffer.accel.y;
+  let intAccelZ = hwBuffer.accel.z;
+  let intGyroX = hwBuffer.gyro.x;
+  let intGyroY = hwBuffer.gyro.y;
+  let intGyroZ = hwBuffer.gyro.z;
 
   if (accAccumulator.count > 0) {
-      integratedAccel.x = accAccumulator.x / accAccumulator.count;
-      integratedAccel.y = accAccumulator.y / accAccumulator.count;
-      integratedAccel.z = accAccumulator.z / accAccumulator.count;
-      accAccumulator = { x: 0, y: 0, z: 0, count: 0 };
+      intAccelX = accAccumulator.x / accAccumulator.count;
+      intAccelY = accAccumulator.y / accAccumulator.count;
+      intAccelZ = accAccumulator.z / accAccumulator.count;
+      accAccumulator.x = 0; accAccumulator.y = 0; accAccumulator.z = 0; accAccumulator.count = 0;
   }
   
   if (gyroAccumulator.count > 0) {
-      integratedGyro.x = gyroAccumulator.x / gyroAccumulator.count;
-      integratedGyro.y = gyroAccumulator.y / gyroAccumulator.count;
-      integratedGyro.z = gyroAccumulator.z / gyroAccumulator.count;
-      gyroAccumulator = { x: 0, y: 0, z: 0, count: 0 };
+      intGyroX = gyroAccumulator.x / gyroAccumulator.count;
+      intGyroY = gyroAccumulator.y / gyroAccumulator.count;
+      intGyroZ = gyroAccumulator.z / gyroAccumulator.count;
+      gyroAccumulator.x = 0; gyroAccumulator.y = 0; gyroAccumulator.z = 0; gyroAccumulator.count = 0;
   }
 
-  const result: IMUData = {
-    accelX: integratedAccel.x,
-    accelY: integratedAccel.y,
-    accelZ: integratedAccel.z,
-    gyroX: integratedGyro.x,
-    gyroY: integratedGyro.y,
-    gyroZ: integratedGyro.z,
-    magX: hwBuffer.mag.x,
-    magY: hwBuffer.mag.y,
-    magZ: hwBuffer.mag.z,
-    pressure: hwBuffer.baro.pressure || 1013.25,
-    stepCount: virtualStepCount,
-    source: (status.accel === 'REAL') ? 'REAL' : 'VIRTUAL'
-  };
+  REUSABLE_IMU.accelX = intAccelX;
+  REUSABLE_IMU.accelY = intAccelY;
+  REUSABLE_IMU.accelZ = intAccelZ;
+  REUSABLE_IMU.gyroX = intGyroX;
+  REUSABLE_IMU.gyroY = intGyroY;
+  REUSABLE_IMU.gyroZ = intGyroZ;
+  REUSABLE_IMU.magX = hwBuffer.mag.x;
+  REUSABLE_IMU.magY = hwBuffer.mag.y;
+  REUSABLE_IMU.magZ = hwBuffer.mag.z;
+  REUSABLE_IMU.pressure = hwBuffer.baro.pressure || 1013.25;
+  REUSABLE_IMU.source = (status.accel === 'REAL') ? 'REAL' : 'VIRTUAL';
 
   if (detectedActivity === 'WALKING') {
-      const accelMag = Math.sqrt(result.accelX**2 + result.accelY**2 + result.accelZ**2);
+      const accelMag = Math.sqrt(intAccelX**2 + intAccelY**2 + intAccelZ**2);
       if (accelMag > 1.2 && now - lastTimestamp > 500) {
          // SAFETY CHECK for long running sessions (10^15 limit)
          if (virtualStepCount < Number.MAX_SAFE_INTEGER) {
@@ -302,7 +311,7 @@ export const getSensorFusionData = (gpsPos: PositionData, dtMs: number, autoDriv
          lastTimestamp = now;
       }
   }
-  result.stepCount = virtualStepCount;
+  REUSABLE_IMU.stepCount = virtualStepCount;
 
-  return { data: result, status, activity: detectedActivity };
+  return { data: REUSABLE_IMU, status, activity: detectedActivity };
 };

@@ -273,9 +273,9 @@ export class FirmwareEngine {
 
         // Smart lookup based on hardware ID
         // If ID not found exactly, try to find a close match based on vendor for demo
-        let match: FirmwareMetadata | undefined = GLOBAL_FIRMWARE_REPO[identity.hardwareId];
+        let match: FirmwareMetadata | undefined = GLOBAL_FIRMWARE_REPO[identity?.hardwareId || 'INTERNAL'];
         
-        if (!match) {
+        if (!match && identity) {
             // Fuzzy match for demo purposes
             if (identity.vendor === 'U_BLOX') match = GLOBAL_FIRMWARE_REPO['F9P_00192'];
             else if (identity.vendor === 'TRIMBLE') match = GLOBAL_FIRMWARE_REPO['TRMB_BD9'];
@@ -293,7 +293,7 @@ export class FirmwareEngine {
             else if (identity.connectionInterface === 'USB_OTG') match = GLOBAL_FIRMWARE_REPO['USB_GENERIC'];
         }
 
-        if (match && match.version !== identity.currentFirmware) {
+        if (match && identity && match.version !== identity.currentFirmware) {
             onLog(`Update Available: ${match.version} [${match.criticality}]`);
             this.status = 'IDLE';
             return match;
