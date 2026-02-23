@@ -393,7 +393,7 @@ export const generateSatellites = (
     const availableConstellations = Object.values(Constellation); 
 
     if (scanState === 'TUNNEL_COASTING') {
-        return { sats: [], scanState };
+        return { sats: ACTIVE_SATELLITES_BUFFER, scanState };
     }
 
     // ENHANCED MULTI-CONSTELLATION DISTRIBUTION
@@ -568,7 +568,21 @@ export const calculatePosition = (
   const fusionResult = getSensorFusionData(inputPos || DEFAULT_POSITION, deltaTimeMs, config.dynamicSimulation);
   const imu = fusionResult.data;
   const dt = physicsDt * 0.001;
-  const currentSpeed = Math.hypot(FILTER_STATE[2], FILTER_STATE[3]); 
+  let currentSpeed = Math.hypot(FILTER_STATE[2], FILTER_STATE[3]); 
+
+  // --- ZUPT (Zero Velocity Update) ALGORITHM ---
+  if (config.zuptEnabled) {
+      // Calculate acceleration magnitude (1g = 9.81m/s^2, normalized to 1.0 here typically)
+      const accelMag = Math.sqrt(imu.accelX * imu.accelX + imu.accelY * imu.accelY + imu.accelZ * imu.accelZ);
+      const isStationary = Math.abs(accelMag - 1.0) < 0.05 && currentSpeed < 0.5;
+      
+      if (isStationary) {
+          // Clamp velocity to exactly 0 to prevent INS drift
+          FILTER_STATE[2] = 0;
+          FILTER_STATE[3] = 0;
+          currentSpeed = 0;
+      }
+  }
   
   // --- TUNNEL MODE & INERTIAL DEAD RECKONING (PHYSICS ENGINE) ---
   let isTunnelMode = false;

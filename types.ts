@@ -341,6 +341,12 @@ export interface GNSSConfig {
   forceDriverInjection: boolean;
   smartStandby: boolean; // NEW: Intelligent Wake-on-Motion
   tunnelMode: boolean; // NEW: AI Dead Reckoning
+  mavlinkBroadcast: boolean; // NEW: Broadcast to drones
+  udpTargetIp: string; // NEW: Target IP for UDP
+  udpPort: number; // NEW: Target Port for UDP
+  antiSpoofing: boolean; // NEW: Anti-Spoofing & Jamming Analyzer
+  legacyOsMode: boolean; // NEW: Support for Android 5 / iOS 7 / Win XP
+  zuptEnabled: boolean; // NEW: Zero Velocity Update for INS
 }
 
 export type InjectionStatus = 'MOUNTED' | 'IDLE' | 'FAILED' | 'DENIED';

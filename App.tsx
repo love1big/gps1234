@@ -12,6 +12,9 @@ import { simulateUsbIngest, UsbDriver } from './services/usbDrivers';
 import { ExternalWifiManager } from './services/wifiDrivers'; // NEW
 import { BluetoothManager } from './services/bluetoothGnss'; // NEW
 import { NtripClient } from './services/ntripClient'; // NEW
+import { MavlinkBroadcaster } from './services/mavlinkBroadcaster'; // NEW
+import { AntiSpoofingEngine } from './services/antiSpoofingEngine'; // NEW
+import { FirmwareManager } from './services/firmwareEngine'; // NEW
 import { sanitizePosition } from './services/dataSanitizer'; // MIL-SPEC SANITIZER
 import { INITIAL_POSITION } from './constants';
 import * as Location from 'expo-location';
@@ -133,7 +136,7 @@ export default function App() {
     agpsServer: 'supl.google.com:7276', signalWatchdog: true, boostInternal: false, boostExternal: false, 
     powerSaverMode: false, environment: 'suburban', dynamicSimulation: true, autoSignalRecovery: true, 
     wifiPositioning: true, bluetoothPositioning: false, rfMultipathRejection: true, scheduledWakeUp: false, 
-    activeRfPulse: true, antennaHeight: 0, antennaOffsetX: 0, antennaOffsetY: 0, leoSatellites: false, quantumIns: false,
+    activeRfPulse: true, antennaHeight: 0, antennaOffsetX: 0, antennaOffsetY: 0, leoSatellites: true, quantumIns: true,
     networkBoost: true, keepAliveMode: true, dataCompression: true, multiPathTcp: false, 
     congestionControl: true, lowLatencyMode: true, dnsTurbo: true, autoNtrip: true,
     lastNtripUpdate: null, nmeaOutput: false, autoResourceMgmt: true,
@@ -141,7 +144,13 @@ export default function App() {
     predictiveGuidance: false, vectorSnapping: true, injectionThreshold: 15, predictiveLookahead: 0.8,
     externalWifiEnabled: true, forceDriverInjection: true,
     smartStandby: true, // Enabled by default for power saving
-    tunnelMode: true // Enabled by default for better UX
+    tunnelMode: true, // Enabled by default for better UX
+    mavlinkBroadcast: false,
+    udpTargetIp: '192.168.1.255',
+    udpPort: 14550,
+    antiSpoofing: true,
+    legacyOsMode: false, // Set to true for Android 5 / iOS 7 / Win XP
+    zuptEnabled: true // Enable Zero Velocity Update
   });
 
   // BATCHED STATE
@@ -230,6 +239,24 @@ export default function App() {
           // Initial External Hardware Scan
           await ExternalWifiManager.scanForHardware((msg, lvl) => addLog('EXT-WIFI', msg, lvl));
 
+          // Check for Firmware Updates
+          setTimeout(async () => {
+              const update = await FirmwareManager.checkForUpdates({
+                  vendor: 'QUALCOMM', modelName: 'Snapdragon Modem', hardwareId: 'INTERNAL', 
+                  currentFirmware: 'QC_GNSS_5.0.0', capabilities: { dualBand: true, rtk: false, rawMeas: true, imuIntegrated: true, ppp: false, lband: false }, 
+                  connectionInterface: 'INTERNAL_BUS'
+              }, () => {});
+              
+              if (update) {
+                  Alert.alert(
+                      "Firmware Update Available",
+                      `Version ${update.version} is available for your GNSS hardware. Please go to Settings to install.`,
+                      [{ text: "Later", style: "cancel" }, { text: "Acknowledge" }]
+                  );
+                  addLog('SYS', `FW Update Available: ${update.version}`, 'info');
+              }
+          }, 5000);
+
           startEngine();
       };
       initSystem();
@@ -275,9 +302,15 @@ export default function App() {
       updateMotionState(isMoving, 100);
 
       // --- ADVANCED TIMING CONTROL (SMART STANDBY) ---
-      let nextDelay = 50; // Default 20Hz
+      let nextDelay = 33; // Default ~30Hz (25-35 times per sec)
       let powerProfile: 'HIGH_PERF' | 'BALANCED' | 'LOW_POWER' | 'ULTRA_LOW' = 'HIGH_PERF';
       
+      // LEGACY OS MODE (Android 5, iOS 7, Win XP)
+      if (configRef.current.legacyOsMode) {
+          nextDelay = Math.max(nextDelay, 500); // Max 2Hz to prevent CPU overload on old devices
+          powerProfile = 'LOW_POWER';
+      }
+
       if (isBackground) {
           // BACKGROUND LOGIC
           // If we are injecting mock location, we must stay somewhat awake to feed Google Maps
@@ -294,10 +327,10 @@ export default function App() {
               nextDelay = 5000; // 5s deep sleep while parked/static
               powerProfile = 'ULTRA_LOW';
           } else if (configRef.current.operationMode === 'BACKGROUND_ECO') {
-              nextDelay = 1000; 
+              nextDelay = 100; // ~10Hz (8-10 times per sec)
               powerProfile = 'LOW_POWER';
           } else if (batteryLevel < 0.15) {
-              nextDelay = 2000;
+              nextDelay = 100; // ~10Hz (8-10 times per sec)
               powerProfile = 'LOW_POWER';
           }
       }
@@ -338,6 +371,32 @@ export default function App() {
 
           positionRef.current = { ...internalResult.position };
 
+          // --- ANTI-SPOOFING & JAMMING ANALYZER ---
+          if (configRef.current.antiSpoofing) {
+              const securityAnalysis = AntiSpoofingEngine.analyze(positionRef.current, genResult.sats, addLog);
+              positionRef.current.jammingProbability = securityAnalysis.jammingProbability;
+              positionRef.current.spoofingProbability = securityAnalysis.spoofingProbability;
+              if (securityAnalysis.status === 'CRITICAL') {
+                  positionRef.current.integrityState = 'COMPROMISED';
+              } else if (securityAnalysis.status === 'WARNING') {
+                  positionRef.current.integrityState = 'SUSPICIOUS';
+              } else {
+                  positionRef.current.integrityState = 'TRUSTED';
+              }
+          }
+
+          // --- MAVLINK / UDP BROADCASTER ---
+          if (configRef.current.mavlinkBroadcast) {
+              if (!MavlinkBroadcaster.getStatus().active) {
+                  MavlinkBroadcaster.start(configRef.current.udpTargetIp, configRef.current.udpPort, addLog);
+              }
+              MavlinkBroadcaster.broadcast(positionRef.current, configRef.current.udpTargetIp, configRef.current.udpPort, addLog);
+          } else {
+              if (MavlinkBroadcaster.getStatus().active) {
+                  MavlinkBroadcaster.stop(addLog);
+              }
+          }
+
           if (configRef.current.hardwareReplacementMode) {
              SystemInjector.push(positionRef.current, addLog);
           }
@@ -369,6 +428,12 @@ export default function App() {
                   }
 
                   // OPTIMIZATION: BATCHED UPDATE
+                  // SAFE INTEGER RESET for renderTrigger
+                  let nextTrigger = dashboard.renderTrigger + 1;
+                  if (nextTrigger > Number.MAX_SAFE_INTEGER - 1000) {
+                      nextTrigger = 0;
+                  }
+
                   setDashboard({
                       position: sanitizePosition({ ...positionRef.current }),
                       imu: internalResult.imu,
@@ -376,7 +441,7 @@ export default function App() {
                       network: calculateNetworkStats(configRef.current),
                       usbStatus: currentUsbStatus,
                       sats: genResult.sats, // ZERO-COPY reference pass
-                      renderTrigger: now // Force sub-components to know time changed
+                      renderTrigger: nextTrigger // Force sub-components to know time changed
                   });
                   
                   if (internalResult.log) addLog(internalResult.log.module, internalResult.log.message, internalResult.log.level);
@@ -456,6 +521,36 @@ export default function App() {
           options,
           (loc) => { 
              const now = Date.now();
+             
+             // --- HARDWARE ERROR FILTERING ---
+             // 1. Filter out poor accuracy (> 100m)
+             if (loc.coords.accuracy && loc.coords.accuracy > 100) {
+                 addLog('HW-FILTER', `Rejected: Poor accuracy (${loc.coords.accuracy.toFixed(0)}m)`, 'warn');
+                 return;
+             }
+             
+             // 2. Filter out impossible jumps (> 60 m/s)
+             if (hardwarePosRef.current && lastHardwareTimeRef.current > 0) {
+                 const dt = (now - lastHardwareTimeRef.current) / 1000;
+                 if (dt > 0 && dt < 10) {
+                     // Haversine distance
+                     const R = 6371e3;
+                     const lat1 = hardwarePosRef.current.latitude * Math.PI/180;
+                     const lat2 = loc.coords.latitude * Math.PI/180;
+                     const dLat = (loc.coords.latitude - hardwarePosRef.current.latitude) * Math.PI/180;
+                     const dLon = (loc.coords.longitude - hardwarePosRef.current.longitude) * Math.PI/180;
+                     const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
+                     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                     const dist = R * c;
+                     
+                     const speed = dist / dt;
+                     if (speed > 60) {
+                         addLog('HW-FILTER', `Rejected: Sudden jump (${speed.toFixed(1)} m/s)`, 'warn');
+                         return; // Skip this update
+                     }
+                 }
+             }
+
              lastHardwareTimeRef.current = now;
              
              hardwarePosRef.current = {
