@@ -17,6 +17,28 @@ export const CONSTELLATION_COLORS: Record<Constellation, string> = {
 export const INITIAL_POSITION = {
   latitude: 13.7563, // Bangkok (Strategic HQ)
   longitude: 100.5018,
+  altitude: 15,
+  accuracy: 10,
+  speed: 0,
+  bearing: 0,
+  timestamp: 0,
+  hdop: 1.0,
+  vdop: 1.0,
+  pdop: 1.0,
+  gdop: 1.0,
+  satellitesVisible: 0,
+  satellitesUsed: 0,
+  satellitesInternal: 0,
+  satellitesExternal: 0,
+  scanState: 'SEARCHING' as any,
+  integrityState: 'TRUSTED' as any,
+  jammingProbability: 0,
+  spoofingProbability: 0,
+  fusionWeight: 0.5,
+  rtkStatus: 'NONE' as any,
+  systemStatus: 'ACTIVE' as any,
+  activity: 'STATIONARY' as any,
+  rfAnchorsUsed: 0
 };
 
 // --- PERFORMANCE TUNING (OVERCLOCKED) ---

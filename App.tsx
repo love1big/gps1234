@@ -411,37 +411,38 @@ export default function App() {
               else if (resourceState.quality === 'ECO') uiThreshold = 1000;
 
               if (timeSinceLastUi > uiThreshold) {
-                  // USB DRIVER CHECK
-                  let currentUsbStatus = dashboard.usbStatus;
-                  if (configRef.current.autoUsbDetection && (now - lastUsbCheckRef.current > 5000)) {
-                      lastUsbCheckRef.current = now;
-                      const usbPackets = simulateUsbIngest();
-                      if (usbPackets.length > 0) {
-                          currentUsbStatus = { 
-                              ...currentUsbStatus, 
-                              connected: true, 
-                              protocol: UsbDriver.getProtocol(), 
-                              deviceName: UsbDriver.identity?.modelName || 'Generic OTG GPS',
-                              identity: UsbDriver.identity || undefined 
-                          };
-                      }
-                  }
-
                   // OPTIMIZATION: BATCHED UPDATE
                   // SAFE INTEGER RESET for renderTrigger
-                  let nextTrigger = dashboard.renderTrigger + 1;
-                  if (nextTrigger > Number.MAX_SAFE_INTEGER - 1000) {
-                      nextTrigger = 0;
-                  }
+                  setDashboard(prev => {
+                      // USB DRIVER CHECK
+                      let currentUsbStatus = prev.usbStatus;
+                      if (configRef.current.autoUsbDetection && (now - lastUsbCheckRef.current > 5000)) {
+                          lastUsbCheckRef.current = now;
+                          const usbPackets = simulateUsbIngest();
+                          if (usbPackets.length > 0) {
+                              currentUsbStatus = { 
+                                  ...currentUsbStatus, 
+                                  connected: true, 
+                                  protocol: UsbDriver.getProtocol(), 
+                                  deviceName: UsbDriver.identity?.modelName || 'Generic OTG GPS',
+                                  identity: UsbDriver.identity || undefined 
+                              };
+                          }
+                      }
 
-                  setDashboard({
-                      position: sanitizePosition({ ...positionRef.current }),
-                      imu: internalResult.imu,
-                      sensorStatus: internalResult.sensorStatus,
-                      network: calculateNetworkStats(configRef.current),
-                      usbStatus: currentUsbStatus,
-                      sats: genResult.sats, // ZERO-COPY reference pass
-                      renderTrigger: nextTrigger // Force sub-components to know time changed
+                      let nextTrigger = prev.renderTrigger + 1;
+                      if (nextTrigger > Number.MAX_SAFE_INTEGER - 1000) {
+                          nextTrigger = 0;
+                      }
+                      return {
+                          position: sanitizePosition({ ...positionRef.current }),
+                          imu: internalResult.imu,
+                          sensorStatus: internalResult.sensorStatus,
+                          network: calculateNetworkStats(configRef.current),
+                          usbStatus: currentUsbStatus,
+                          sats: genResult.sats, // ZERO-COPY reference pass
+                          renderTrigger: nextTrigger // Force sub-components to know time changed
+                      };
                   });
                   
                   if (internalResult.log) addLog(internalResult.log.module, internalResult.log.message, internalResult.log.level);
