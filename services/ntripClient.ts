@@ -95,8 +95,13 @@ export class NtripManager {
         onLog: (msg: string) => void,
         onData: (data: any) => void
     ) {
-        if (this.isConnecting) return;
+        if (this.isConnecting || this.connectedCaster) return;
         this.isConnecting = true;
+        
+        if (this.socket) {
+            clearInterval(this.socket);
+            this.socket = null;
+        }
         
         onLog(`Connecting to NTRIP Caster: ${caster.host}:${caster.port}/${caster.mountpoint}...`);
         
@@ -114,9 +119,21 @@ export class NtripManager {
         // Simulate Data Stream
         this.socket = setInterval(() => {
             if (this.connectedCaster) {
-                this.bytesReceived += Math.floor(Math.random() * 500) + 200;
+                const len = Math.floor(Math.random() * 500) + 300;
+                this.bytesReceived += len;
+                
+                // Simulate common RTCM 3.x messages
+                // 1004: Extended L1/L2 GPS RTK Observables
+                // 1005: Stationary RTK Reference Station ARP
+                // 1074: GPS MSM4
+                // 1084: GLONASS MSM4
+                // 1094: Galileo MSM4
+                // 1124: BeiDou MSM4
+                const msgTypes = [1004, 1074, 1084, 1094, 1124];
+                if (Math.random() > 0.8) msgTypes.push(1005); // ARP sent less frequently
+                
                 // Emit dummy RTCM packet
-                onData({ type: 'RTCM', msgId: 1077, len: 256 });
+                onData({ type: 'RTCM3', messages: msgTypes, len: len });
             }
         }, 1000);
     }

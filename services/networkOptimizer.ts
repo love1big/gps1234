@@ -1,14 +1,34 @@
 
 import { NetworkStats, GNSSConfig } from '../types';
+import * as Network from 'expo-network';
+import { CellularManager } from './cellularModem';
 
 // Simulation constants
 const BASE_LATENCY_4G = 45;
 const BASE_LATENCY_5G = 12;
+const BASE_LATENCY_WIFI = 15;
 const BASE_LATENCY_QUIC = 8; // Ultra Low
 const BASE_JITTER = 15;
 
 let currentPhase = 0;
 let packetLossAccumulator = 0;
+
+let currentNetworkState: Network.NetworkState | null = null;
+let networkStateInterval: NodeJS.Timeout | null = null;
+
+const updateNetworkState = async () => {
+    try {
+        currentNetworkState = await Network.getNetworkStateAsync();
+    } catch (e) {
+        // ignore
+    }
+};
+
+// Start polling
+updateNetworkState();
+if (!networkStateInterval) {
+    networkStateInterval = setInterval(updateNetworkState, 5000);
+}
 
 // --- MULTIPATH CONTROLLER ---
 // Simulates a "Bonded" interface where WiFi and Cellular are active simultaneously
@@ -38,12 +58,35 @@ export const calculateNetworkStats = (config: GNSSConfig): NetworkStats => {
   const isBoosted = config.networkBoost;
   
   // --- 1. LATENCY ENGINE (QUIC vs TCP) ---
+  let baseLatency = BASE_LATENCY_4G;
+  let connectionType: NetworkStats['connectionType'] = '4G';
+
+  // Determine base connection type and latency from actual device state if available
+  if (currentNetworkState) {
+      if (currentNetworkState.type === Network.NetworkStateType.WIFI) {
+          connectionType = 'WIFI';
+          baseLatency = BASE_LATENCY_WIFI;
+      } else if (currentNetworkState.type === Network.NetworkStateType.CELLULAR) {
+          connectionType = isBoosted ? '5G' : '4G';
+          baseLatency = isBoosted ? BASE_LATENCY_5G : BASE_LATENCY_4G;
+      } else if (currentNetworkState.type === Network.NetworkStateType.NONE || currentNetworkState.type === Network.NetworkStateType.UNKNOWN) {
+          // Offline or unknown
+          baseLatency = 999;
+      }
+  } else {
+      connectionType = isBoosted ? '5G' : '4G';
+      baseLatency = isBoosted ? BASE_LATENCY_5G : BASE_LATENCY_4G;
+  }
+
   // If Low Latency Mode (QUIC) is on, we skip the TCP Handshake overhead
-  let baseLatency = config.lowLatencyMode ? BASE_LATENCY_QUIC : (isBoosted ? BASE_LATENCY_5G : BASE_LATENCY_4G);
+  if (config.lowLatencyMode && baseLatency < 999) {
+      baseLatency = BASE_LATENCY_QUIC;
+      connectionType = 'QUIC';
+  }
   
   // DNS Turbo: Reduces the "Lookup" phase of latency
-  if (config.dnsTurbo) {
-      baseLatency -= 3; // Simulated faster lookup
+  if (config.dnsTurbo && baseLatency < 999) {
+      baseLatency = Math.max(2, baseLatency - 3); // Simulated faster lookup
   }
   
   // Advanced: BBR Congestion Control
@@ -55,34 +98,44 @@ export const calculateNetworkStats = (config: GNSSConfig): NetworkStats => {
   
   let jitter = isBoosted ? 3 : BASE_JITTER;
   if (config.lowLatencyMode) jitter = 1.5; // QUIC is very stable
+  if (connectionType === 'WIFI') jitter = 5;
 
   // LEO Override
   if (config.leoSatellites) {
       baseLatency = 5;
       jitter = 0.5;
+      connectionType = '6G-LEO';
+  }
+
+  // Multi-Path TCP Redundancy
+  if (config.multiPathTcp && baseLatency < 999) {
+      connectionType = 'MPTCP';
   }
 
   // --- 2. PACKET LOSS & STABILITY ---
   const noise = Math.sin(currentPhase) * 5 + (Math.random() * 5);
   
   // Calculate raw latency with noise
-  let finalLatency = Math.max(4, (baseLatency + noise) * congestionFactor);
+  let finalLatency = baseLatency >= 999 ? 999 : Math.max(4, (baseLatency + noise) * congestionFactor);
 
   // Packet Loss Logic
   let packetLoss = 0;
   
-  // Heartbeat / Keep-Alive Logic
-  // If active, we prevent the modem from sleeping, killing packet loss
-  if (config.keepAliveMode) {
-     packetLoss = 0; 
+  if (baseLatency >= 999 || (currentNetworkState && !currentNetworkState.isConnected)) {
+      packetLoss = 100; // Complete loss if offline
+  } else if (config.keepAliveMode) {
+      packetLoss = 0; 
   } else {
-     // Standard fluctuation
-     if (Math.random() > 0.95) packetLoss = Math.random() * 2.0;
+      // Standard fluctuation based on connection type
+      const lossProbability = connectionType === 'WIFI' ? 0.98 : 0.95;
+      if (Math.random() > lossProbability) {
+          packetLoss = Math.random() * (connectionType === 'WIFI' ? 1.0 : 2.0);
+      }
   }
   
   // Multi-Path TCP Redundancy
   // If one link fails, the other picks up -> 0% Loss
-  if (config.multiPathTcp) {
+  if (config.multiPathTcp && packetLoss < 100) {
       packetLoss = 0;
       // Bonus: If bonded, jitter is reduced because we pick the fastest packet
       jitter *= 0.5; 
@@ -96,6 +149,11 @@ export const calculateNetworkStats = (config: GNSSConfig): NetworkStats => {
   let downloadBase = isBoosted ? 35000 : 5000; // kbps
   let uploadBase = isBoosted ? 12000 : 1500; // kbps
   
+  if (connectionType === 'WIFI') {
+      downloadBase = 80000; // 80Mbps
+      uploadBase = 40000;
+  }
+
   // MPTCP: Aggregates WiFi + Cell
   if (config.multiPathTcp) {
       downloadBase *= 2.2; // Double speed
@@ -114,9 +172,16 @@ export const calculateNetworkStats = (config: GNSSConfig): NetworkStats => {
       uploadBase = 50000;
   }
 
+  if (baseLatency >= 999) {
+      downloadBase = 0;
+      uploadBase = 0;
+  }
+
   // --- 4. SIGNAL STRENGTH (dBm) ---
   let signalStrength = -95;
-  if (isBoosted || config.leoSatellites) {
+  if (baseLatency >= 999) {
+      signalStrength = -120; // Dead zone
+  } else if (isBoosted || config.leoSatellites || connectionType === 'WIFI') {
       signalStrength = -55 + (Math.random() * 3); // Full bars
   } else {
       signalStrength = -95 + (Math.random() * 10);
@@ -130,31 +195,40 @@ export const calculateNetworkStats = (config: GNSSConfig): NetworkStats => {
   if (config.dnsTurbo) stabilityPenalty *= 0.5;
   
   let stabilityScore = Math.max(0, Math.min(100, 100 - stabilityPenalty));
+  
+  if (baseLatency >= 999) {
+      stabilityScore = 0;
+  }
 
-  // Protocol Label
-  let connectionType: NetworkStats['connectionType'] = '4G';
-  if (config.leoSatellites) connectionType = '6G-LEO';
-  else if (config.lowLatencyMode) connectionType = 'QUIC';
-  else if (config.multiPathTcp) connectionType = 'MPTCP';
-  else if (isBoosted) connectionType = '5G';
+  const cellularModem = CellularManager.getStatus();
+  if (cellularModem && cellularModem.status === 'CONNECTED') {
+      connectionType = 'GPRS';
+      baseLatency = 120; // GPRS is slow
+      jitter = 30;
+      downloadBase = 80; // 80 kbps
+      uploadBase = 40; // 40 kbps
+      signalStrength = cellularModem.signalStrength;
+  }
 
   return {
     latency: Number(finalLatency.toFixed(0)),
     jitter: Number(jitter.toFixed(1)),
-    downloadRate: Number((downloadBase + Math.random() * 800).toFixed(0)),
-    uploadRate: Number((uploadBase + Math.random() * 300).toFixed(0)),
+    downloadRate: Number((downloadBase > 0 ? downloadBase + Math.random() * 800 : 0).toFixed(0)),
+    uploadRate: Number((uploadBase > 0 ? uploadBase + Math.random() * 300 : 0).toFixed(0)),
     packetLoss: Number(packetLoss.toFixed(2)),
-    stabilityScore: stabilityScore,
+    stabilityScore: Number(stabilityScore.toFixed(1)),
     signalStrength: Number(signalStrength.toFixed(0)),
     connectionType,
-    isOptimized: isBoosted || config.lowLatencyMode || config.multiPathTcp
+    isOptimized: isBoosted || config.lowLatencyMode || config.multiPathTcp,
+    cellularModem: cellularModem || undefined
   };
 };
 
 export const getNetworkLog = (stats: NetworkStats): string | null => {
+  if (stats.stabilityScore === 0) return `Network Offline: Connection lost.`;
   if (stats.connectionType === 'QUIC' && Math.random() > 0.98) return `QUIC/UDP Stream: 0-RTT Handshake verified. Latency: ${stats.latency}ms`;
   if (stats.connectionType === 'MPTCP' && Math.random() > 0.98) return `Link Aggregation Active: Bandwidth ${(stats.downloadRate/1000).toFixed(1)} Mbps`;
-  if (stats.stabilityScore === 100 && Math.random() > 0.99) return `Link Status: PERFECT SYNC (Heartbeat Active)`;
+  if (stats.stabilityScore >= 99 && Math.random() > 0.99) return `Link Status: PERFECT SYNC (Heartbeat Active)`;
   if (stats.packetLoss > 0.5) return `Packet Loss detected (${stats.packetLoss}%). Re-routing...`;
   return null;
 };

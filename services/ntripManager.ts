@@ -18,7 +18,7 @@ let statusHoldCounter = 0;
 
 // --- DISTANCE UTILS ---
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return Infinity;
+    if (Number.isNaN(lat1) || Number.isNaN(lon1) || Number.isNaN(lat2) || Number.isNaN(lon2)) return Infinity;
 
     const R = 6371; 
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -57,7 +57,7 @@ const parseSourceTable = (rawText: string, sourceHost: string): NtripCaster[] =>
                     const lon = parseFloat(parts[10]);
                     
                     // Filter invalid coordinates
-                    if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
+                    if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat !== 0 && lon !== 0) {
                         casters.push({
                             id: mountpoint.toUpperCase(),
                             host: sourceHost, // Assume same host as source table

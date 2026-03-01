@@ -11,12 +11,25 @@ export enum Constellation {
 }
 
 export enum SignalBand {
+  L1CA = 'L1C/A',
+  L1C = 'L1C',
   L1 = 'L1',
+  L2 = 'L2',
   L5 = 'L5',
+  L6 = 'L6',
   E1 = 'E1',
   E5a = 'E5a',
-  B1 = 'B1',
+  E5b = 'E5b',
+  E6 = 'E6',
+  B1I = 'B1I',
+  B2I = 'B2I',
+  B3I = 'B3I',
+  B1C = 'B1C',
   B2a = 'B2a',
+  B2b = 'B2b',
+  G1 = 'G1',
+  G2 = 'G2',
+  L_BAND = 'L-band',
   Ku = 'Ku' 
 }
 
@@ -79,6 +92,7 @@ export interface Satellite {
   displaySnr?: number; 
   usedInFix: boolean;
   hasL5: boolean; 
+  signals?: string[];
   isNlos: boolean; 
   carrierPhase?: number; 
   status: 'locking' | 'tracking' | 'ephemeris_missing' | 'multipath_rejected' | 'spoofing_suspect' | 'weather_attenuated'; 
@@ -120,6 +134,17 @@ export interface ExternalWifiAdapter {
     status: 'DISCONNECTED' | 'SCANNING' | 'ASSOCIATING' | 'CONNECTED' | 'DRIVER_MISSING';
     ssid?: string;
     signalStrength?: number;
+    ipAddress?: string;
+}
+
+export interface CellularModem {
+    id: string;
+    model: string;
+    imei: string;
+    operator: string;
+    signalStrength: number;
+    networkType: 'GPRS' | 'EDGE' | '3G' | '4G' | '5G';
+    status: 'DISCONNECTED' | 'SEARCHING' | 'REGISTERED' | 'CONNECTED';
     ipAddress?: string;
 }
 
@@ -267,6 +292,7 @@ export interface PositionData {
   solutionType?: 'SINGLE' | 'DGPS' | 'RTK_INT' | 'RTK_FLOAT' | 'PPP' | 'DR';
   wetDelayIndex?: number; 
   tunnelDistance?: number; // NEW: Distance traveled in tunnel
+  activeSignals?: string[]; // Array of unique active signals
 }
 
 export interface NetworkStats {
@@ -277,9 +303,10 @@ export interface NetworkStats {
   packetLoss: number; 
   stabilityScore: number; 
   signalStrength: number; 
-  connectionType: '4G' | '5G' | 'WIFI' | 'SAT' | 'MPTCP' | '6G-LEO' | 'QUIC' | 'EXT-WIFI';
+  connectionType: 'GPRS' | '4G' | '5G' | 'WIFI' | 'SAT' | 'MPTCP' | '6G-LEO' | 'QUIC' | 'EXT-WIFI';
   isOptimized: boolean;
   externalAdapter?: ExternalWifiAdapter; 
+  cellularModem?: CellularModem;
 }
 
 export interface GNSSConfig {
@@ -347,6 +374,14 @@ export interface GNSSConfig {
   antiSpoofing: boolean; // NEW: Anti-Spoofing & Jamming Analyzer
   legacyOsMode: boolean; // NEW: Support for Android 5 / iOS 7 / Win XP
   zuptEnabled: boolean; // NEW: Zero Velocity Update for INS
+  syncClockWithGps: boolean; // NEW: Sync application clock with GPS time
+  
+  // RTK / PPK Simulation Controls
+  rtkMode: 'OFF' | 'RTK' | 'PPK';
+  baseStationLat: number;
+  baseStationLon: number;
+  baseStationAlt: number;
+  correctionDataQuality: number; // 0.0 to 1.0
 }
 
 export type InjectionStatus = 'MOUNTED' | 'IDLE' | 'FAILED' | 'DENIED';

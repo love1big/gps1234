@@ -21,6 +21,16 @@
                 '</div>';
             }
         };
+        window.onunhandledrejection = function(event) {
+            console.error(event.reason);
+            var root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = '<div style="color:#ef4444; background:#0f172a; padding:20px; font-family:monospace; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center;">' +
+                    '<h1 style="font-size:24px; margin-bottom:10px;">PROMISE REJECTION</h1>' +
+                    '<p style="color:#fca5a5;">' + (event.reason && event.reason.message ? event.reason.message : event.reason) + '</p>' +
+                '</div>';
+            }
+        };
     </script>
 
     <style>

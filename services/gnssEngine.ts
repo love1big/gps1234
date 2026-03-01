@@ -1,8 +1,9 @@
-import { Satellite, PositionData, GNSSConfig, Constellation, IMUData, LogEntry, SensorStatus, ActivityState, ChipsetProfile, EphemerisData, SystemScanState, WeatherCondition } from '../types';
+import { Satellite, PositionData, GNSSConfig, Constellation, IMUData, LogEntry, SensorStatus, ActivityState, ChipsetProfile, EphemerisData, SystemScanState, WeatherCondition, SignalBand } from '../types';
 import { INITIAL_POSITION } from '../constants';
 import { getSensorFusionData } from './sensorManager';
 import { sanitizeSensorData, LatFilter, LonFilter, AltFilter } from './hardwareDrivers';
 import { scanRfEnvironment } from './rfLandscape';
+import { runMitigationPipeline } from './errorMitigation';
 
 const EARTH_RADIUS_KM = 6378.137;
 const MU = 398600.4418; 
@@ -130,7 +131,7 @@ const calculateTroposphericDelay = (elDeg: number, altitudeM: number): number =>
     const elRad = Math.max(5, elDeg) * DEG_TO_RAD; 
     const z = PI/2 - elRad; 
     const delay = (0.002277 / Math.cos(z)) * (P + (1255 / T + 0.05) * 0.5);
-    return isFinite(delay) ? delay : 0;
+    return Number.isFinite(delay) ? delay : 0;
 };
 
 const performLambdaCheck = (sats: Satellite[], dualBand: boolean): boolean => {
@@ -258,11 +259,26 @@ export const injectEphemerisData = (data: EphemerisData[]) => {
 
 let lastRtcmInjectionTime = 0;
 let rtcmCorrectionQuality = 0;
+let rtcmCounter = 0;
 
-export const injectRtcmData = (data: any) => {
+export const injectRtcmData = (data: any): LogEntry | null => {
     // Simulate RTCM processing
     lastRtcmInjectionTime = Date.now();
     rtcmCorrectionQuality = Math.min(1.0, rtcmCorrectionQuality + 0.1);
+    rtcmCounter++;
+
+    // Only log every 5th packet to avoid spamming the terminal
+    if (rtcmCounter % 5 === 0 && data.type === 'RTCM3') {
+        const msgs = data.messages ? data.messages.join(', ') : 'Unknown';
+        return {
+            id: Date.now().toString() + Math.random().toString(),
+            timestamp: Date.now(),
+            module: 'RTCM3',
+            message: `Decoded MSM/RTK messages: [${msgs}]. Payload: ${data.len}B`,
+            level: 'info'
+        };
+    }
+    return null;
 };
 
 export const recalculateOrbits = () => {
@@ -524,6 +540,37 @@ export const generateSatellites = (
                            (constellation === Constellation.QZSS);
         sat.hasL5 = config.dualFrequencyMode && supportsL5 && (i % 3 !== 0); 
         
+        // Assign signals based on constellation
+        sat.signals = [];
+        switch (constellation) {
+            case Constellation.GPS:
+                sat.signals.push(SignalBand.L1CA, SignalBand.L1C, SignalBand.L2);
+                if (sat.hasL5) sat.signals.push(SignalBand.L5);
+                break;
+            case Constellation.BEIDOU:
+                sat.signals.push(SignalBand.B1I, SignalBand.B2I, SignalBand.B3I, SignalBand.B1C, SignalBand.B2a, SignalBand.B2b);
+                break;
+            case Constellation.GLONASS:
+                sat.signals.push(SignalBand.G1, SignalBand.G2);
+                break;
+            case Constellation.GALILEO:
+                sat.signals.push(SignalBand.E1, SignalBand.E5a, SignalBand.E5b, SignalBand.E6);
+                break;
+            case Constellation.QZSS:
+                sat.signals.push(SignalBand.L1, SignalBand.L2, SignalBand.L6);
+                if (sat.hasL5) sat.signals.push(SignalBand.L5);
+                break;
+            case Constellation.NAVIC:
+                sat.signals.push(SignalBand.L5);
+                break;
+            case Constellation.SBAS:
+                sat.signals.push(SignalBand.L1CA);
+                break;
+            case Constellation.LEO:
+                sat.signals.push(SignalBand.L_BAND, SignalBand.Ku);
+                break;
+        }
+        
         // PUSH REFERENCE (Zero Allocation)
         ACTIVE_SATELLITES_BUFFER.push(sat);
     }
@@ -548,24 +595,26 @@ export const calculatePosition = (
   
   if (!validateStateIntegrity()) forceHardReset('Anomaly Detected: Resetting EKF');
 
-  if (inputPos) {
-      if (inputPos.latitude !== 0) {
-          inputPos.latitude = LatFilter.filter(inputPos.latitude);
-          inputPos.longitude = LonFilter.filter(inputPos.longitude);
-          inputPos.altitude = AltFilter.filter(inputPos.altitude);
+  let filteredPos = inputPos ? { ...inputPos } : null;
+
+  if (filteredPos) {
+      if (filteredPos.latitude !== 0) {
+          filteredPos.latitude = LatFilter.filter(filteredPos.latitude);
+          filteredPos.longitude = LonFilter.filter(filteredPos.longitude);
+          filteredPos.altitude = AltFilter.filter(filteredPos.altitude);
       }
   }
 
-  if (!isAnchorInitialized && inputPos && inputPos.latitude !== 0) {
-      anchorLat = inputPos.latitude;
-      anchorLon = inputPos.longitude;
+  if (!isAnchorInitialized && filteredPos && filteredPos.latitude !== 0) {
+      anchorLat = filteredPos.latitude;
+      anchorLon = filteredPos.longitude;
       isAnchorInitialized = true;
       FILTER_STATE.fill(0);
-      FILTER_STATE[4] = inputPos.altitude || 15;
+      FILTER_STATE[4] = filteredPos.altitude || 15;
   }
 
   const physicsDt = Math.min(deltaTimeMs, 1500); 
-  const fusionResult = getSensorFusionData(inputPos || DEFAULT_POSITION, deltaTimeMs, config.dynamicSimulation);
+  const fusionResult = getSensorFusionData(filteredPos || DEFAULT_POSITION, deltaTimeMs, config.dynamicSimulation);
   const imu = fusionResult.data;
   const dt = physicsDt * 0.001;
   let currentSpeed = Math.hypot(FILTER_STATE[2], FILTER_STATE[3]); 
@@ -656,17 +705,17 @@ export const calculatePosition = (
   FILTER_STATE[3] = vy;
 
   const { pdop, hdop, gdop } = calculateAllDOPs(sats);
-  const isHardwareFresh = inputPos && (Date.now() - inputPos.timestamp) < 1000;
+  const isHardwareFresh = filteredPos && (Date.now() - filteredPos.timestamp) < 1000;
   let usedSats = 0;
   let logMsg: { module: string, message: string, level: LogEntry['level'] } | undefined;
 
   // --- EKF UPDATE STEP ---
-  if (!isTunnelMode && isHardwareFresh && inputPos) {
+  if (!isTunnelMode && isHardwareFresh && filteredPos) {
       const latToMeters = 111132.92 - 559.82 * getFastCos(2 * anchorLat);
       const lonToMeters = 111412.84 * getFastCos(anchorLat);
       
-      const zMeasEast = (inputPos.longitude - anchorLon) * lonToMeters;
-      const zMeasNorth = (inputPos.latitude - anchorLat) * latToMeters;
+      const zMeasEast = (filteredPos.longitude - anchorLon) * lonToMeters;
+      const zMeasNorth = (filteredPos.latitude - anchorLat) * latToMeters;
       
       // SANITIZE INPUT MEASUREMENTS
       if (Number.isFinite(zMeasEast) && Number.isFinite(zMeasNorth)) {
@@ -700,10 +749,29 @@ export const calculatePosition = (
               if (config.operationMode === 'URBAN_CANYON') trustFactor *= 1.5; 
               if (config.weatherCondition !== 'CLEAR') trustFactor *= 1.8;
 
-              // Apply RTCM Corrections
+              // Apply RTCM Corrections & RTK/PPK Simulation
               let rtkStatus: PositionData['rtkStatus'] = 'NONE';
               let correctionAge = 0;
-              if (Date.now() - lastRtcmInjectionTime < 10000) {
+              
+              if (config.rtkMode !== 'OFF') {
+                  // RTK / PPK Simulation Mode
+                  const distToBase = Math.hypot(
+                      (filteredPos.latitude - config.baseStationLat) * 111.32,
+                      (filteredPos.longitude - config.baseStationLon) * 111.32 * Math.cos(filteredPos.latitude * DEG_TO_RAD)
+                  ); // Distance in km
+                  
+                  let maxDist = config.rtkMode === 'RTK' ? 35 : 100; // RTK typically 30-40km, PPK can be further
+                  
+                  if (distToBase < maxDist) {
+                      correctionAge = config.rtkMode === 'RTK' ? Math.random() * 2 : 0; // PPK is post-processed, so age is effectively 0
+                      const quality = config.correctionDataQuality * (1 - (distToBase / maxDist) * 0.5); // Degrade quality over distance
+                      
+                      trustFactor *= (1.0 - (quality * 0.95)); // Massive accuracy boost
+                      if (quality > 0.8) rtkStatus = 'FIXED';
+                      else if (quality > 0.3) rtkStatus = 'FLOAT';
+                  }
+              } else if (Date.now() - lastRtcmInjectionTime < 10000) {
+                  // Real RTCM Injection
                   correctionAge = (Date.now() - lastRtcmInjectionTime) / 1000;
                   trustFactor *= (1.0 - (rtcmCorrectionQuality * 0.9)); // Massive accuracy boost
                   if (rtcmCorrectionQuality > 0.8) rtkStatus = 'FIXED';
@@ -711,10 +779,11 @@ export const calculatePosition = (
               } else {
                   rtcmCorrectionQuality = Math.max(0, rtcmCorrectionQuality - 0.05); // Decay
               }
+              
               REUSABLE_POSITION.rtkStatus = rtkStatus;
               REUSABLE_POSITION.correctionAge = correctionAge;
 
-              const reportedAcc = Math.max(0.01, inputPos.accuracy); // Allow sub-cm accuracy
+              const reportedAcc = Math.max(0.01, filteredPos.accuracy); // Allow sub-cm accuracy
               const R = (reportedAcc * trustFactor) ** 2; 
               
               const K_East = COVARIANCE[0] / (COVARIANCE[0] + R);
@@ -728,13 +797,13 @@ export const calculatePosition = (
                   COVARIANCE[7] *= (1.0 - K_North);
               }
               
-              if (Number.isFinite(inputPos.altitude)) {
-                  FILTER_STATE[4] = inputPos.altitude * 0.2 + FILTER_STATE[4] * 0.8;
+              if (Number.isFinite(filteredPos.altitude)) {
+                  FILTER_STATE[4] = filteredPos.altitude * 0.2 + FILTER_STATE[4] * 0.8;
               }
               
               consecutiveRejections = 0;
               lastValidUpdate = Date.now();
-              usedSats = inputPos.satellitesUsed || 12;
+              usedSats = filteredPos.satellitesUsed || 12;
           }
       }
   } else if (!isTunnelMode) {
@@ -784,13 +853,43 @@ export const calculatePosition = (
   REUSABLE_POSITION.gdop = parseFloat(gdop.toFixed(1)); 
   REUSABLE_POSITION.satellitesVisible = sats.length;
   REUSABLE_POSITION.satellitesUsed = usedSats;
+
+  // Populate active signals
+  const activeSignalsSet = new Set<string>();
+  for (const sat of sats) {
+      if (sat.usedInFix && sat.signals) {
+          for (const sig of sat.signals) {
+              activeSignalsSet.add(sig);
+          }
+      }
+  }
+  REUSABLE_POSITION.activeSignals = Array.from(activeSignalsSet);
+
   REUSABLE_POSITION.scanState = scanState;
   REUSABLE_POSITION.activity = fusionResult.activity;
   REUSABLE_POSITION.tunnelDistance = isTunnelMode ? parseFloat(tunnelDistTraveled.toFixed(1)) : 0; 
 
+  // --- ADVANCED ERROR MITIGATION PIPELINE ---
+  const isStationary = Math.abs(speed) < 0.5;
+  const mitigationResult = runMitigationPipeline(
+      REUSABLE_POSITION,
+      fusionResult.data,
+      sats,
+      config,
+      isStationary
+  );
+
+  // If multipath is detected, we could log it or adjust accuracy
+  if (mitigationResult.multipathDetected) {
+      mitigationResult.correctedPosition.accuracy *= 1.5; // Degrade accuracy
+      if (!logMsg) {
+          logMsg = { module: 'MITIGATION', message: 'Multipath detected, accuracy degraded', level: 'warn' };
+      }
+  }
+
   return {
-    position: REUSABLE_POSITION,
-    imu: fusionResult.data,
+    position: mitigationResult.correctedPosition,
+    imu: mitigationResult.correctedIMU,
     sensorStatus: fusionResult.status,
     log: logMsg
   };

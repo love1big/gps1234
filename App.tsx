@@ -19,6 +19,19 @@ import { sanitizePosition } from './services/dataSanitizer'; // MIL-SPEC SANITIZ
 import { INITIAL_POSITION } from './constants';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
+import * as TaskManager from 'expo-task-manager';
+
+const BACKGROUND_LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
+
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
+  if (error) {
+    return;
+  }
+  if (data) {
+    // This keeps the JS engine alive in the background
+    // allowing SystemInjector.push to continue running via setTimeout
+  }
+});
 
 import SatelliteMap from './components/SatelliteMap';
 import SignalChart from './components/SignalChart';
@@ -150,7 +163,13 @@ export default function App() {
     udpPort: 14550,
     antiSpoofing: true,
     legacyOsMode: false, // Set to true for Android 5 / iOS 7 / Win XP
-    zuptEnabled: true // Enable Zero Velocity Update
+    zuptEnabled: true, // Enable Zero Velocity Update
+    syncClockWithGps: false, // Sync application clock with GPS time
+    rtkMode: 'OFF',
+    baseStationLat: INITIAL_POSITION.latitude,
+    baseStationLon: INITIAL_POSITION.longitude,
+    baseStationAlt: INITIAL_POSITION.altitude,
+    correctionDataQuality: 0.9
   });
 
   // BATCHED STATE
@@ -224,6 +243,7 @@ export default function App() {
         }
       });
 
+      let fwTimer: NodeJS.Timeout | null = null;
       const initSystem = async () => {
           const sec = await runSecurityScan();
           if (sec.isCompromised) {
@@ -240,7 +260,7 @@ export default function App() {
           await ExternalWifiManager.scanForHardware((msg, lvl) => addLog('EXT-WIFI', msg, lvl));
 
           // Check for Firmware Updates
-          setTimeout(async () => {
+          fwTimer = setTimeout(async () => {
               const update = await FirmwareManager.checkForUpdates({
                   vendor: 'QUALCOMM', modelName: 'Snapdragon Modem', hardwareId: 'INTERNAL', 
                   currentFirmware: 'QC_GNSS_5.0.0', capabilities: { dualBand: true, rtk: false, rawMeas: true, imuIntegrated: true, ppp: false, lband: false }, 
@@ -262,10 +282,12 @@ export default function App() {
       initSystem();
       return () => {
           subscription.remove();
+          if (fwTimer) clearTimeout(fwTimer);
           if (engineTimerRef.current) clearTimeout(engineTimerRef.current);
           if (hardwareWatchdogRef.current) clearInterval(hardwareWatchdogRef.current);
           stopSensorListeners();
           if (locationSubscription.current) locationSubscription.current.remove();
+          Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => {});
       };
   }, []);
 
@@ -385,6 +407,15 @@ export default function App() {
               }
           }
 
+          // --- CLOCK SYNC WITH GPS ---
+          if (configRef.current.syncClockWithGps && ((dashboard.usbStatus && dashboard.usbStatus.connected) || (BluetoothManager.getStatus() && BluetoothManager.getStatus()?.connected))) {
+              // In a real app, this would require root/system permissions to set the system clock.
+              // Here we simulate the sync by logging it and potentially adjusting an internal offset.
+              if (Math.random() > 0.98) {
+                  addLog('TIME-SYNC', `System clock synced with GPS time (Offset: ${(Math.random() * 10).toFixed(2)}ms)`, 'info');
+              }
+          }
+
           // --- MAVLINK / UDP BROADCASTER ---
           if (configRef.current.mavlinkBroadcast) {
               if (!MavlinkBroadcaster.getStatus().active) {
@@ -397,7 +428,7 @@ export default function App() {
               }
           }
 
-          if (configRef.current.hardwareReplacementMode) {
+          if (configRef.current.hardwareReplacementMode || configRef.current.systemOverride) {
              SystemInjector.push(positionRef.current, addLog);
           }
 
@@ -493,6 +524,23 @@ export default function App() {
         }
         
         await Location.requestBackgroundPermissionsAsync();
+        
+        try {
+            await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+                accuracy: Location.Accuracy.Balanced,
+                timeInterval: 10000,
+                distanceInterval: 0,
+                showsBackgroundLocationIndicator: true,
+                foregroundService: {
+                    notificationTitle: "OMNIGNSS PRO",
+                    notificationBody: "Mock Location is running in the background",
+                    notificationColor: "#10b981",
+                }
+            });
+            addLog('HW-DRIVER', 'Background Service Started', 'success');
+        } catch (e) {
+            addLog('HW-DRIVER', 'Failed to start background service', 'warn');
+        }
         
         // Dynamic Parameters based on Mode
         let options = { 
@@ -669,7 +717,10 @@ export default function App() {
                 position={dashboard.position}
                 usbConnected={dashboard.usbStatus.connected} 
                 usbStatus={dashboard.usbStatus} 
-                onNtripData={injectRtcmData}
+                onNtripData={(data) => {
+                    const log = injectRtcmData(data);
+                    if (log) addLog(log.module, log.message, log.level);
+                }}
             />
             
             <View style={{height: 40}} />

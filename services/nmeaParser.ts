@@ -64,19 +64,19 @@ const parseCoord = (val: string, dir: string): number => {
     const minStr = val.substring(degLen);
     
     let deg = parseFloat(degStr) + parseFloat(minStr) / 60;
-    if (isNaN(deg)) return 0;
+    if (Number.isNaN(deg)) return 0;
     if (dir === 'S' || dir === 'W') deg *= -1;
     return deg;
 };
 
 const safeInt = (val: string): number => {
     const res = parseInt(val, 10);
-    return isNaN(res) ? 0 : res;
+    return Number.isNaN(res) ? 0 : res;
 };
 
 const safeFloat = (val: string): number => {
     const res = parseFloat(val);
-    return isNaN(res) ? 0 : res;
+    return Number.isNaN(res) ? 0 : res;
 };
 
 const getConstellationFromTalker = (talker: string): Constellation => {

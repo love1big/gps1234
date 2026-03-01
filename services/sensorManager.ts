@@ -104,7 +104,7 @@ export const initSensorListeners = async (isLowEndDevice: boolean = false) => {
                 accAccumulator.count++;
 
                 const mag = Math.sqrt(x*x + y*y + z*z);
-                if (isFinite(mag)) {
+                if (Number.isFinite(mag)) {
                     accelMagnitudeHistory[historyIdx] = mag;
                     historyIdx = (historyIdx + 1) % ACCEL_HISTORY_LEN;
                 }
@@ -153,7 +153,7 @@ export const initSensorListeners = async (isLowEndDevice: boolean = false) => {
         if (baroAvailable) {
             safeSetInterval(Barometer, 2000); 
             subBaro = Barometer.addListener(data => {
-                if (data && !isNaN(data.pressure)) {
+                if (data && !Number.isNaN(data.pressure)) {
                     hwBuffer.baro = {
                         pressure: data.pressure,
                         relativeAltitude: data.relativeAltitude ?? 0

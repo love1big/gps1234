@@ -24,9 +24,17 @@ class BluetoothGnssManager {
     private connectedDevice: BluetoothDevice | null = null;
     private isScanning = false;
     private scanTimeout: any = null;
+    private activeTimeouts: NodeJS.Timeout[] = [];
 
     public getStatus(): BluetoothDevice | null {
         return this.connectedDevice;
+    }
+
+    public stopScan() {
+        if (this.scanTimeout) clearTimeout(this.scanTimeout);
+        this.activeTimeouts.forEach(t => clearTimeout(t));
+        this.activeTimeouts = [];
+        this.isScanning = false;
     }
 
     /**
@@ -38,6 +46,7 @@ class BluetoothGnssManager {
     ): Promise<void> {
         if (this.isScanning) return;
         this.isScanning = true;
+        this.activeTimeouts = [];
         onLog('Scanning Bluetooth Spectrum (SPP/BLE)...', 'info');
 
         // Simulate discovery delay
@@ -47,26 +56,31 @@ class BluetoothGnssManager {
         const count = 2 + Math.floor(Math.random() * 3);
         const candidates = [...BT_SIGNATURES].sort(() => 0.5 - Math.random()).slice(0, count);
 
-        candidates.forEach((sig, index) => {
-            setTimeout(() => {
-                const mac = Array.from({length: 6}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join(':');
-                const device: BluetoothDevice = {
-                    id: `bt_${index}_${Date.now()}`,
-                    name: `${sig.prefix} ${Math.floor(Math.random() * 999)}`,
-                    address: mac,
-                    type: sig.type as any,
-                    brand: sig.brand,
-                    connected: false,
-                    isGnssCapable: true
-                };
-                onFound(device);
-            }, index * 800);
-        });
+        return new Promise<void>((resolve) => {
+            candidates.forEach((sig, index) => {
+                const t = setTimeout(() => {
+                    const mac = Array.from({length: 6}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0').toUpperCase()).join(':');
+                    const device: BluetoothDevice = {
+                        id: `bt_${index}_${Date.now()}`,
+                        name: `${sig.prefix} ${Math.floor(Math.random() * 999)}`,
+                        address: mac,
+                        type: sig.type as any,
+                        brand: sig.brand,
+                        connected: false,
+                        isGnssCapable: true
+                    };
+                    onFound(device);
+                }, index * 800);
+                this.activeTimeouts.push(t);
+            });
 
-        this.scanTimeout = setTimeout(() => {
-            this.isScanning = false;
-            onLog('Bluetooth Scan Complete.', 'success');
-        }, count * 1000 + 500);
+            this.scanTimeout = setTimeout(() => {
+                this.isScanning = false;
+                this.activeTimeouts = [];
+                onLog('Bluetooth Scan Complete.', 'success');
+                resolve();
+            }, count * 1000 + 500);
+        });
     }
 
     /**

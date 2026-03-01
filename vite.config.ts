@@ -15,8 +15,6 @@ export default defineConfig({
     include: [
       'react-native-web',
       'expo-modules-core',
-    ],
-    exclude: [
       'expo-location',
       'expo-battery',
       'expo-device',
@@ -35,6 +33,7 @@ export default defineConfig({
   define: {
     global: 'window',
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
   },
   server: {
     host: '0.0.0.0',

@@ -127,6 +127,18 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
           <StatBox label="H.A.R.P." value={(position.rfAnchorsUsed || 0) > 0 ? "ON" : "OFF"} unit="" color="#c084fc" width="30%" />
       </View>
 
+      {/* ACTIVE SIGNALS */}
+      {position.activeSignals && position.activeSignals.length > 0 && (
+          <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+              <View style={{ width: '100%' }}>
+                  <Text style={styles.statLabel}>ACTIVE SIGNALS</Text>
+                  <Text style={[styles.statValue, { color: '#6ee7b7', fontSize: 10, marginTop: 2 }]} numberOfLines={2}>
+                      {position.activeSignals.join(', ')}
+                  </Text>
+              </View>
+          </View>
+      )}
+
       {/* NTRIP / CORRECTIONS */}
       {position.rtkStatus !== 'NONE' && (
           <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
@@ -138,10 +150,25 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
       {/* NETWORK */}
       {network && (
          <View style={styles.networkGrid}>
-            <StatBox label="NET" value={network.connectionType} unit="" width="30%" color="#93c5fd" />
+            <StatBox label="NET" value={network.connectionType} unit="" width="30%" color={network.connectionType === 'GPRS' ? '#f59e0b' : '#93c5fd'} />
             <StatBox label="Ping" value={safeFixed(network.latency, 0)} unit="ms" width="30%" color={(network.latency || 999) < 50 ? '#4ade80' : '#fbbf24'} />
             <StatBox label="Down" value={safeFixed((network.downloadRate || 0)/1000, 1)} unit="Mbps" width="30%" />
          </View>
+      )}
+
+      {/* CELLULAR MODEM STATUS */}
+      {network?.cellularModem && network.cellularModem.status === 'CONNECTED' && (
+          <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+              <StatBox label="OPERATOR" value={network.cellularModem.operator} unit="" color="#fbbf24" width="48%" />
+              <StatBox label="SIGNAL" value={network.cellularModem.signalStrength} unit="dBm" color="#fbbf24" width="48%" />
+          </View>
+      )}
+
+      {/* USB STATUS */}
+      {usbStatus && usbStatus.deviceName !== '' && (
+          <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+              <StatBox label="USB DEVICE" value={usbStatus.deviceName} unit="" color="#a78bfa" width="100%" />
+          </View>
       )}
     </View>
   );

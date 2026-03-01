@@ -66,7 +66,7 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
   // OPTIMIZATION: Memoize the sorted list to prevent re-sorting on every heading update
   const renderList = React.useMemo(() => {
       return satellites
-        .filter(s => !isNaN(s.azimuth) && !isNaN(s.elevation) && isFinite(s.azimuth) && isFinite(s.elevation))
+        .filter(s => !Number.isNaN(s.azimuth) && !Number.isNaN(s.elevation) && Number.isFinite(s.azimuth) && Number.isFinite(s.elevation))
         .sort((a, b) => (b.usedInFix ? 1 : 0) - (a.usedInFix ? 1 : 0) || (b.displaySnr || b.snr) - (a.displaySnr || a.snr))
         .slice(0, limitCount);
   }, [satellites, limitCount, renderTrigger]); // Only re-sort when data actually changes
@@ -79,7 +79,7 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
       <Text style={styles.title}>SKYPLOT {heading ? `(HEAD: ${heading.toFixed(0)}°)` : '(NORTH UP)'}</Text>
       <View style={styles.mapContainer}>
         <Svg height={size} width={size}>
-          <G origin={`${center}, ${center}`} rotation={isNaN(heading) ? 0 : -heading}>
+          <G origin={`${center}, ${center}`} rotation={Number.isNaN(heading) ? 0 : -heading}>
              <SkyplotBackground size={size} simple={isSimple} />
              {renderList.map((sat) => {
                 // OPTIMIZATION: Pre-calculate coordinates
@@ -89,7 +89,7 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
                 let y = center + r * Math.sin(theta);
                 
                 // Safety clamp
-                if (isNaN(x) || isNaN(y)) { x = center; y = center; }
+                if (Number.isNaN(x) || Number.isNaN(y)) { x = center; y = center; }
 
                 const color = CONSTELLATION_COLORS[sat.constellation] || '#fff';
                 const isLocked = sat.usedInFix;

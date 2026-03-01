@@ -10,7 +10,7 @@ interface Props {
 const SignalChart: React.FC<Props> = memo(({ satellites }) => {
   // Sort and filter invalid data
   const data = satellites
-    .filter(s => s.status !== 'ephemeris_missing' && !isNaN(s.snr) && isFinite(s.snr))
+    .filter(s => s.status !== 'ephemeris_missing' && !Number.isNaN(s.snr) && Number.isFinite(s.snr))
     .sort((a, b) => {
         const aVal = a.displaySnr || a.snr;
         const bVal = b.displaySnr || b.snr;
@@ -27,7 +27,7 @@ const SignalChart: React.FC<Props> = memo(({ satellites }) => {
         {data.map((item, idx) => {
             // Use smoothed SNR if available, guard against NaN
             let snrVal = item.displaySnr || item.snr;
-            if (isNaN(snrVal) || !isFinite(snrVal)) snrVal = 0;
+            if (Number.isNaN(snrVal) || !Number.isFinite(snrVal)) snrVal = 0;
             
             // Limit height to 100%
             const heightPct = Math.min(100, Math.max(5, (snrVal / 60) * 100));

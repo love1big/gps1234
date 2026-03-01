@@ -9,6 +9,7 @@ import { ExternalWifiManager } from '../services/wifiDrivers';
 import { NavBridge } from '../services/universalNavBridge';
 import { BluetoothManager } from '../services/bluetoothGnss';
 import { NtripClient } from '../services/ntripClient'; // NEW
+import { CellularManager } from '../services/cellularModem'; // NEW
 
 interface Props {
   config: GNSSConfig;
@@ -147,15 +148,23 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
   const [connectedBt, setConnectedBt] = useState<BluetoothDevice | null>(null);
   const [availableNavApps, setAvailableNavApps] = useState<NavAppProfile[]>([]);
   const [ntripStatus, setNtripStatus] = useState<{ connected: boolean, caster: any, bytes: number }>({ connected: false, caster: null, bytes: 0 });
+  const [cellularModem, setCellularModem] = useState<any>(null);
+
+  const flashTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
       Battery.getBatteryLevelAsync().then(setBatteryLevel);
       const wifiTimer = setInterval(() => {
           setWifiAdapter(ExternalWifiManager.getAdapterStatus());
           setNtripStatus(NtripClient.getStatus());
+          setCellularModem(CellularManager.getStatus());
       }, 2000);
       setAvailableNavApps(NavBridge.getSupportedApps());
-      return () => clearInterval(wifiTimer);
+      return () => {
+          clearInterval(wifiTimer);
+          if (flashTimerRef.current) clearInterval(flashTimerRef.current);
+          BluetoothManager.stopScan();
+      };
   }, []);
 
   // Internal Logic for Firmware UI
@@ -190,7 +199,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
 
   const startFlashing = async () => {
       setIsUpdating(true);
-      const timer = setInterval(() => {
+      flashTimerRef.current = setInterval(() => {
           const s = FirmwareManager.getStatus();
           setFlashProgress(s.progress);
           setFlashStatus(s.task);
@@ -201,7 +210,7 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
           bat,
           (msg) => setLogs(p => [...p.slice(-3), msg]),
           (success) => {
-              clearInterval(timer);
+              if (flashTimerRef.current) clearInterval(flashTimerRef.current);
               setIsUpdating(false);
               setFwUpdateAvailable(null);
               setLogs(p => [...p, success ? 'REBOOTING SYSTEM...' : 'SAFE ROLLBACK COMPLETED']);
@@ -250,17 +259,55 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
       await NavBridge.launchApp(appId, position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
   };
 
+  const [isNtripConnecting, setIsNtripConnecting] = useState(false);
+
   const handleNtripConnect = async () => {
+      if (isNtripConnecting) return;
       if (ntripStatus.connected) {
           NtripClient.disconnect((msg) => setLogs(p => [...p.slice(-2), msg]));
           return;
       }
       
-      const caster = await NtripClient.findNearestCaster(position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
-      if (caster) {
-          await NtripClient.connect(caster, (msg) => setLogs(p => [...p.slice(-2), msg]), (data) => {
-              if (onNtripData) onNtripData(data);
-          });
+      setIsNtripConnecting(true);
+      try {
+          const caster = await NtripClient.findNearestCaster(position.latitude, position.longitude, (msg) => setLogs(p => [...p.slice(-2), msg]));
+          if (caster) {
+              await NtripClient.connect(caster, (msg) => setLogs(p => [...p.slice(-2), msg]), (data) => {
+                  if (onNtripData) onNtripData(data);
+              });
+          }
+      } catch (e) {
+          setLogs(p => [...p.slice(-2), 'NTRIP Connection Failed']);
+      } finally {
+          setIsNtripConnecting(false);
+      }
+  };
+
+  const [isModemConnecting, setIsModemConnecting] = useState(false);
+
+  const handleModemInit = async () => {
+      if (isModemConnecting) return;
+      setIsModemConnecting(true);
+      try {
+          await CellularManager.initializeModem((msg, lvl) => setLogs(p => [...p.slice(-2), msg]));
+          setCellularModem(CellularManager.getStatus());
+      } catch (e) {
+          setLogs(p => [...p.slice(-2), 'Modem Init Failed']);
+      } finally {
+          setIsModemConnecting(false);
+      }
+  };
+
+  const handleGprsConnect = async () => {
+      if (isModemConnecting) return;
+      setIsModemConnecting(true);
+      try {
+          await CellularManager.connectGprs((msg, lvl) => setLogs(p => [...p.slice(-2), msg]));
+          setCellularModem(CellularManager.getStatus());
+      } catch (e) {
+          setLogs(p => [...p.slice(-2), 'GPRS Connect Failed']);
+      } finally {
+          setIsModemConnecting(false);
       }
   };
 
@@ -304,11 +351,77 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
               onClick={() => onUpdateConfig({ vectorSnapping: !config.vectorSnapping })} 
           />
            <Toggle 
-              label="Mock Location Injection" 
-              description="ส่งค่าพิกัดไปยังระบบ Android (ต้องเปิด Developer Options)"
+              label="Mock Location Injection (100% External App Support)" 
+              description="ส่งพิกัดไปยัง Google Maps และแอปนำทางอื่นๆ (ต้องตั้งค่าใน Developer Options)"
               active={config.systemOverride} 
               onClick={() => onUpdateConfig({ systemOverride: !config.systemOverride })} 
           />
+           <Toggle 
+              label="Sync Clock with GPS" 
+              description="ซิงค์เวลาของแอปพลิเคชันกับเวลาจากดาวเทียม GPS (เมื่อต่ออุปกรณ์ภายนอก)"
+              active={config.syncClockWithGps} 
+              onClick={() => onUpdateConfig({ syncClockWithGps: !config.syncClockWithGps })} 
+          />
+      </View>
+
+      <Text style={[styles.header, { marginTop: 20 }]}>RTK / PPK SIMULATION</Text>
+      <View style={styles.section}>
+          <View style={styles.modeContainer}>
+              <Text style={styles.modeTitle}>KINEMATIC MODE</Text>
+              <View style={styles.modeRow}>
+                  {['OFF', 'RTK', 'PPK'].map(mode => (
+                      <TouchableOpacity 
+                          key={mode} 
+                          style={[
+                              styles.modeBtn, 
+                              { borderColor: '#a855f7' }, 
+                              config.rtkMode === mode ? { backgroundColor: '#a855f7' } : null
+                          ]}
+                          onPress={() => onUpdateConfig({ rtkMode: mode as any })}
+                      >
+                          <Text style={[
+                              styles.modeText, 
+                              config.rtkMode === mode ? { color: '#000' } : { color: '#a855f7' }
+                          ]}>{mode}</Text>
+                      </TouchableOpacity>
+                  ))}
+              </View>
+          </View>
+          
+          {config.rtkMode !== 'OFF' && (
+              <>
+                  <View style={styles.sliderContainer}>
+                      <Text style={styles.sliderLabel}>Base Station Latitude: {config.baseStationLat.toFixed(6)}</Text>
+                      <input 
+                          type="range" 
+                          min={-90} max={90} step={0.000001} 
+                          value={config.baseStationLat} 
+                          onChange={(e) => onUpdateConfig({ baseStationLat: parseFloat(e.target.value) })} 
+                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                      />
+                  </View>
+                  <View style={styles.sliderContainer}>
+                      <Text style={styles.sliderLabel}>Base Station Longitude: {config.baseStationLon.toFixed(6)}</Text>
+                      <input 
+                          type="range" 
+                          min={-180} max={180} step={0.000001} 
+                          value={config.baseStationLon} 
+                          onChange={(e) => onUpdateConfig({ baseStationLon: parseFloat(e.target.value) })} 
+                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                      />
+                  </View>
+                  <View style={styles.sliderContainer}>
+                      <Text style={styles.sliderLabel}>Correction Data Quality: {(config.correctionDataQuality * 100).toFixed(0)}%</Text>
+                      <input 
+                          type="range" 
+                          min={0} max={1} step={0.01} 
+                          value={config.correctionDataQuality} 
+                          onChange={(e) => onUpdateConfig({ correctionDataQuality: parseFloat(e.target.value) })} 
+                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                      />
+                  </View>
+              </>
+          )}
       </View>
 
       <Text style={[styles.header, { marginTop: 20 }]}>HARDWARE BRIDGE</Text>
@@ -360,9 +473,50 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
                 </TouchableOpacity>
                </>
           ) : (
-             <TouchableOpacity style={[styles.checkBtn, { borderColor: '#22c55e' }]} onPress={handleNtripConnect}>
-                <Text style={[styles.checkText, { color: '#4ade80' }]}>AUTO-CONNECT NEAREST BASE</Text>
+             <TouchableOpacity style={[styles.checkBtn, { borderColor: '#22c55e' }]} onPress={handleNtripConnect} disabled={isNtripConnecting}>
+                <Text style={[styles.checkText, { color: '#4ade80' }]}>{isNtripConnecting ? 'CONNECTING...' : 'AUTO-CONNECT NEAREST BASE'}</Text>
              </TouchableOpacity>
+          )}
+      </View>
+
+      {/* BLUETOOTH GNSS CARD */}
+      <View style={[styles.deviceCard, { borderColor: '#3b82f6' }]}>
+          <Text style={[styles.deviceLabel, { color: '#60a5fa', marginBottom: 8 }]}>BLUETOOTH GNSS</Text>
+          {connectedBt ? (
+               <>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>DEVICE:</Text>
+                    <Text style={styles.deviceValue}>{connectedBt.name}</Text>
+                </View>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>STATUS:</Text>
+                    <Text style={[styles.deviceValue, { color: '#4ade80' }]}>CONNECTED</Text>
+                </View>
+                <TouchableOpacity style={[styles.flashBtn, { backgroundColor: '#dc2626' }]} onPress={() => { BluetoothManager.disconnect(); setConnectedBt(null); }}>
+                    <Text style={styles.flashText}>DISCONNECT</Text>
+                </TouchableOpacity>
+               </>
+          ) : (
+             <>
+                 <TouchableOpacity style={[styles.checkBtn, { borderColor: '#3b82f6' }]} onPress={handleBtScan} disabled={btScanning}>
+                    <Text style={[styles.checkText, { color: '#60a5fa' }]}>{btScanning ? 'SCANNING...' : 'SCAN FOR BLUETOOTH GNSS'}</Text>
+                 </TouchableOpacity>
+                 {btDevices.length > 0 && (
+                     <View style={{ marginTop: 12 }}>
+                         {btDevices.map(device => (
+                             <View key={device.id} style={[styles.deviceRow, { alignItems: 'center', borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8, marginTop: 4 }]}>
+                                 <View>
+                                     <Text style={styles.deviceValue}>{device.name}</Text>
+                                     <Text style={styles.deviceLabel}>{device.id}</Text>
+                                 </View>
+                                 <TouchableOpacity style={[styles.flashBtn, { paddingVertical: 6, paddingHorizontal: 12, marginTop: 0 }]} onPress={() => handleBtConnect(device)}>
+                                     <Text style={styles.flashText}>CONNECT</Text>
+                                 </TouchableOpacity>
+                             </View>
+                         ))}
+                     </View>
+                 )}
+             </>
           )}
       </View>
 
@@ -395,6 +549,43 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
           ) : (
              <TouchableOpacity style={styles.checkBtn} onPress={handleWifiScan} disabled={isInjectingDriver}>
                 <Text style={styles.checkText}>{isInjectingDriver ? 'SCANNING BUS...' : 'SCAN FOR EXT. WI-FI'}</Text>
+             </TouchableOpacity>
+          )}
+      </View>
+
+      {/* GPRS / CELLULAR MODEM CARD */}
+      <View style={[styles.deviceCard, { borderColor: '#f59e0b' }]}>
+          <Text style={[styles.deviceLabel, { color: '#fbbf24', marginBottom: 8 }]}>INTERNAL GPRS/CELLULAR MODEM</Text>
+          {cellularModem ? (
+               <>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>MODEL:</Text>
+                    <Text style={styles.deviceValue}>{cellularModem.model}</Text>
+                </View>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>OPERATOR:</Text>
+                    <Text style={styles.deviceValue}>{cellularModem.operator} ({cellularModem.networkType})</Text>
+                </View>
+                <View style={styles.deviceRow}>
+                    <Text style={styles.deviceLabel}>STATUS:</Text>
+                    <Text style={[styles.deviceValue, { color: cellularModem.status === 'CONNECTED' ? '#4ade80' : '#facc15' }]}>
+                        {cellularModem.status}
+                    </Text>
+                </View>
+                {cellularModem.status === 'CONNECTED' ? (
+                     <View style={styles.deviceRow}>
+                        <Text style={styles.deviceLabel}>IP ADDR:</Text>
+                        <Text style={styles.deviceValue}>{cellularModem.ipAddress}</Text>
+                     </View>
+                ) : (
+                    <TouchableOpacity style={[styles.flashBtn, { borderColor: '#f59e0b' }]} onPress={handleGprsConnect} disabled={isModemConnecting}>
+                        <Text style={[styles.flashText, { color: '#fbbf24' }]}>{isModemConnecting ? 'CONNECTING...' : 'CONNECT GPRS'}</Text>
+                    </TouchableOpacity>
+                )}
+               </>
+          ) : (
+             <TouchableOpacity style={[styles.checkBtn, { borderColor: '#f59e0b' }]} onPress={handleModemInit} disabled={isModemConnecting}>
+                <Text style={[styles.checkText, { color: '#fbbf24' }]}>{isModemConnecting ? 'INITIALIZING...' : 'INITIALIZE MODEM'}</Text>
              </TouchableOpacity>
           )}
       </View>
@@ -770,6 +961,24 @@ const styles = StyleSheet.create({
   btType: {
       color: '#60a5fa',
       fontSize: 10
+  },
+  section: {
+      backgroundColor: '#1e293b',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#334155'
+  },
+  sliderContainer: {
+      marginTop: 12,
+      marginBottom: 8,
+  },
+  sliderLabel: {
+      color: '#cbd5e1',
+      fontSize: 12,
+      marginBottom: 8,
+      fontWeight: '600'
   }
 });
 

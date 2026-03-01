@@ -185,7 +185,7 @@ export const computeVirtualGyro = (
 
 export const sanitizeSensorData = (val: number): number => {
     if (typeof val !== 'number') return 0;
-    if (isNaN(val) || !isFinite(val)) return 0;
+    if (Number.isNaN(val) || !Number.isFinite(val)) return 0;
     if (val > 100000) return 100000;
     if (val < -100000) return -100000;
     return val;

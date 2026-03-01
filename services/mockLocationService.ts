@@ -1,6 +1,9 @@
 
 import { PositionData, MockConfig, InjectionStatus, LogEntry } from '../types';
 import { generateNMEASentence, generateRMC } from './gnssEngine';
+import { NativeModules, Platform, Alert, Linking } from 'react-native';
+
+const { MockLocationModule } = NativeModules;
 
 /**
  * MOCK LOCATION KERNEL DRIVER
@@ -59,6 +62,37 @@ class SystemInjectorClass {
         
         if (enabled) {
             console.log('[SystemInjector] DRIVER MOUNTED. INTERCEPTING GPS HAL.');
+            if (Platform.OS === 'android') {
+                if (!MockLocationModule) {
+                    Alert.alert(
+                        "ต้องติดตั้งเป็นแอปพลิเคชัน (APK)",
+                        "ฟีเจอร์นี้ต้องใช้ Native Module กรุณา Build แอปพลิเคชันเป็น APK (npx expo run:android) เพื่อใช้งาน",
+                        [{ text: "ตกลง" }]
+                    );
+                } else {
+                    Alert.alert(
+                        "เปิดใช้งาน Mock Location",
+                        "เพื่อให้ใช้งานกับ Google Maps และแอปนำทางอื่นๆ ได้ 100% กรุณาไปที่ Developer Options > Select mock location app แล้วเลือกแอปนี้",
+                        [
+                            { text: "ยกเลิก", style: "cancel" },
+                            { 
+                                text: "เปิดการตั้งค่า", 
+                                onPress: () => {
+                                    Linking.sendIntent('android.settings.APPLICATION_DEVELOPMENT_SETTINGS').catch(() => {
+                                        Linking.openSettings();
+                                    });
+                                }
+                            }
+                        ]
+                    );
+                }
+            } else if (Platform.OS === 'web') {
+                Alert.alert(
+                    "ไม่รองรับบน Web Browser",
+                    "การจำลองตำแหน่งระดับระบบปฏิบัติการ (Mock Location) ไม่สามารถทำได้ผ่าน Web Browser กรุณาติดตั้งเป็นแอปพลิเคชัน Android (APK)",
+                    [{ text: "ตกลง" }]
+                );
+            }
         } else {
             console.log('[SystemInjector] DRIVER UNMOUNTED. RESTORING HW PASS-THROUGH.');
         }
@@ -93,7 +127,8 @@ class SystemInjectorClass {
 
         // 2. ALTITUDE SMOOTHING (Barometer emulation)
         if (this.config.altitudeSmoothing) {
-            this.altBuffer.push(pos.altitude);
+            const validAlt = Number.isFinite(pos.altitude) ? pos.altitude : 0;
+            this.altBuffer.push(validAlt);
             if (this.altBuffer.length > 5) this.altBuffer.shift();
             finalAlt = (this.altBuffer.reduce((a, b) => a + b, 0) / this.altBuffer.length) + this.driftAlt;
         }
@@ -136,6 +171,10 @@ class SystemInjectorClass {
 
         // 6. INJECTION 
         this.lastInjectTime = now;
+        
+        if (MockLocationModule) {
+            MockLocationModule.setMockLocation(locationPacket);
+        }
         
         // Secure Counter Increment
         if (this.packetCount < Number.MAX_SAFE_INTEGER) {
