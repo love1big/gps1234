@@ -293,6 +293,7 @@ export interface PositionData {
   wetDelayIndex?: number; 
   tunnelDistance?: number; // NEW: Distance traveled in tunnel
   activeSignals?: string[]; // Array of unique active signals
+  constellationBreakdown?: Record<string, number>; // Count of used satellites per constellation
 }
 
 export interface NetworkStats {
@@ -382,6 +383,14 @@ export interface GNSSConfig {
   baseStationLon: number;
   baseStationAlt: number;
   correctionDataQuality: number; // 0.0 to 1.0
+  
+  // NMEA and UBX Output Controls
+  nmeaGgaEnabled: boolean;
+  nmeaRmcEnabled: boolean;
+  nmeaGsvEnabled: boolean;
+  ubxNavPvtEnabled: boolean;
+  outputFrequency: number; // Hz (e.g., 1, 5, 10)
+  logOutputToTerminal: boolean;
 }
 
 export type InjectionStatus = 'MOUNTED' | 'IDLE' | 'FAILED' | 'DENIED';

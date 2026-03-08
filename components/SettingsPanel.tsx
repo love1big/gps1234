@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
+import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import * as Battery from 'expo-battery';
 import { GNSSConfig, PositionData, UsbDeviceStatus, FirmwareMetadata, ExternalWifiAdapter, NavAppProfile, BluetoothDevice, OperationMode, WeatherCondition } from '../types';
@@ -392,36 +393,89 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
               <>
                   <View style={styles.sliderContainer}>
                       <Text style={styles.sliderLabel}>Base Station Latitude: {config.baseStationLat.toFixed(6)}</Text>
-                      <input 
-                          type="range" 
-                          min={-90} max={90} step={0.000001} 
+                      <Slider 
+                          minimumValue={-90} maximumValue={90} step={0.000001} 
                           value={config.baseStationLat} 
-                          onChange={(e) => onUpdateConfig({ baseStationLat: parseFloat(e.target.value) })} 
-                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                          onValueChange={(val) => onUpdateConfig({ baseStationLat: val })} 
+                          minimumTrackTintColor="#a855f7"
+                          maximumTrackTintColor="#334155"
+                          thumbTintColor="#a855f7"
+                          style={{ width: '100%', height: 40 }} 
                       />
                   </View>
                   <View style={styles.sliderContainer}>
                       <Text style={styles.sliderLabel}>Base Station Longitude: {config.baseStationLon.toFixed(6)}</Text>
-                      <input 
-                          type="range" 
-                          min={-180} max={180} step={0.000001} 
+                      <Slider 
+                          minimumValue={-180} maximumValue={180} step={0.000001} 
                           value={config.baseStationLon} 
-                          onChange={(e) => onUpdateConfig({ baseStationLon: parseFloat(e.target.value) })} 
-                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                          onValueChange={(val) => onUpdateConfig({ baseStationLon: val })} 
+                          minimumTrackTintColor="#a855f7"
+                          maximumTrackTintColor="#334155"
+                          thumbTintColor="#a855f7"
+                          style={{ width: '100%', height: 40 }} 
                       />
                   </View>
                   <View style={styles.sliderContainer}>
                       <Text style={styles.sliderLabel}>Correction Data Quality: {(config.correctionDataQuality * 100).toFixed(0)}%</Text>
-                      <input 
-                          type="range" 
-                          min={0} max={1} step={0.01} 
+                      <Slider 
+                          minimumValue={0} maximumValue={1} step={0.01} 
                           value={config.correctionDataQuality} 
-                          onChange={(e) => onUpdateConfig({ correctionDataQuality: parseFloat(e.target.value) })} 
-                          style={{ width: '100%', accentColor: '#a855f7' }} 
+                          onValueChange={(val) => onUpdateConfig({ correctionDataQuality: val })} 
+                          minimumTrackTintColor="#a855f7"
+                          maximumTrackTintColor="#334155"
+                          thumbTintColor="#a855f7"
+                          style={{ width: '100%', height: 40 }} 
                       />
                   </View>
               </>
           )}
+      </View>
+
+      <Text style={[styles.header, { marginTop: 20 }]}>NMEA & UBX OUTPUT CONFIGURATION</Text>
+      <View style={styles.section}>
+          <Toggle 
+              label="Log Output to Terminal" 
+              description="Display generated sentences in the terminal log below"
+              active={config.logOutputToTerminal} 
+              onClick={() => onUpdateConfig({ logOutputToTerminal: !config.logOutputToTerminal })} 
+          />
+          <Toggle 
+              label="Enable $GPGGA" 
+              description="Global Positioning System Fix Data"
+              active={config.nmeaGgaEnabled} 
+              onClick={() => onUpdateConfig({ nmeaGgaEnabled: !config.nmeaGgaEnabled })} 
+          />
+          <Toggle 
+              label="Enable $GPRMC" 
+              description="Recommended Minimum Specific GNSS Data"
+              active={config.nmeaRmcEnabled} 
+              onClick={() => onUpdateConfig({ nmeaRmcEnabled: !config.nmeaRmcEnabled })} 
+          />
+          <Toggle 
+              label="Enable $GPGSV" 
+              description="GNSS Satellites in View"
+              active={config.nmeaGsvEnabled} 
+              onClick={() => onUpdateConfig({ nmeaGsvEnabled: !config.nmeaGsvEnabled })} 
+          />
+          <Toggle 
+              label="Enable UBX-NAV-PVT" 
+              description="u-blox Navigation Position Velocity Time Solution (Hex)"
+              active={config.ubxNavPvtEnabled} 
+              onClick={() => onUpdateConfig({ ubxNavPvtEnabled: !config.ubxNavPvtEnabled })} 
+          />
+          
+          <View style={styles.sliderContainer}>
+              <Text style={styles.sliderLabel}>Output Frequency: {config.outputFrequency} Hz</Text>
+              <Slider 
+                  minimumValue={1} maximumValue={10} step={1} 
+                  value={config.outputFrequency} 
+                  onValueChange={(val) => onUpdateConfig({ outputFrequency: val })} 
+                  minimumTrackTintColor="#0ea5e9"
+                  maximumTrackTintColor="#334155"
+                  thumbTintColor="#0ea5e9"
+                  style={{ width: '100%', height: 40 }} 
+              />
+          </View>
       </View>
 
       <Text style={[styles.header, { marginTop: 20 }]}>HARDWARE BRIDGE</Text>

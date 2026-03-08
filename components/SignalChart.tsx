@@ -7,6 +7,20 @@ interface Props {
   satellites: Satellite[];
 }
 
+const getSatPrefix = (c: string) => {
+    switch (c) {
+        case 'GPS': return 'G';
+        case 'GLONASS': return 'R';
+        case 'GALILEO': return 'E';
+        case 'BEIDOU': return 'B';
+        case 'QZSS': return 'Q';
+        case 'NAVIC': return 'I';
+        case 'SBAS': return 'S';
+        case 'LEO_SAT': return 'L';
+        default: return c.charAt(0);
+    }
+};
+
 const SignalChart: React.FC<Props> = memo(({ satellites }) => {
   // Sort and filter invalid data
   const data = satellites
@@ -23,6 +37,15 @@ const SignalChart: React.FC<Props> = memo(({ satellites }) => {
       <View style={styles.header}>
         <Text style={styles.title}>SIGNAL STRENGTH (C/N0)</Text>
       </View>
+      
+      {/* Background Grid Lines */}
+      <View style={styles.gridLinesContainer}>
+          <View style={[styles.gridLine, { bottom: '25%' }]}><Text style={styles.gridLabel}>15</Text></View>
+          <View style={[styles.gridLine, { bottom: '50%' }]}><Text style={styles.gridLabel}>30</Text></View>
+          <View style={[styles.gridLine, { bottom: '75%' }]}><Text style={styles.gridLabel}>45</Text></View>
+          <View style={[styles.gridLine, { bottom: '100%' }]}><Text style={styles.gridLabel}>60</Text></View>
+      </View>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartArea}>
         {data.map((item, idx) => {
             // Use smoothed SNR if available, guard against NaN
@@ -46,7 +69,7 @@ const SignalChart: React.FC<Props> = memo(({ satellites }) => {
                             ]} 
                         />
                     </View>
-                    <Text style={styles.label}>{item.constellation[0]}{item.prn}</Text>
+                    <Text style={styles.label}>{getSatPrefix(item.constellation)}{item.prn}</Text>
                 </View>
             );
         })}
@@ -79,6 +102,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     height: 120,
     paddingRight: 20,
+    zIndex: 1,
+    paddingLeft: 20, // Add padding left to not overlap with grid labels
   },
   barContainer: {
     alignItems: 'center',
@@ -114,6 +139,32 @@ const styles = StyleSheet.create({
       marginTop: 40,
       width: '100%',
       textAlign: 'center'
+  },
+  gridLinesContainer: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 32,
+    height: 100,
+    zIndex: 0,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    borderStyle: 'dashed',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  gridLabel: {
+    color: '#475569',
+    fontSize: 8,
+    position: 'absolute',
+    left: 0,
+    bottom: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   }
 });
 

@@ -1,7 +1,9 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, Platform, DimensionValue } from 'react-native';
+import Svg, { Circle, Line, Polygon, G, Text as SvgText } from 'react-native-svg';
 import { PositionData, IMUData, NetworkStats, SensorStatus, UsbDeviceStatus } from '../types';
+import TelemetryPlot from './TelemetryPlot';
 
 interface Props {
   position: PositionData;
@@ -21,6 +23,32 @@ const StatBox = ({ label, value, unit, color = '#e2e8f0', width = '23%' }: { lab
     </Text>
   </View>
 );
+
+const CompassWidget = ({ heading, speed }: { heading: number, speed: number }) => {
+  const size = 80;
+  const center = size / 2;
+  const radius = size / 2 - 4;
+  
+  return (
+    <View style={styles.compassContainer}>
+      <Svg width={size} height={size}>
+        <Circle cx={center} cy={center} r={radius} stroke="#334155" strokeWidth="2" fill="#0f172a" />
+        <Line x1={center} y1={center - radius} x2={center} y2={center - radius + 5} stroke="#ef4444" strokeWidth="2" />
+        <Line x1={center} y1={center + radius} x2={center} y2={center + radius - 5} stroke="#64748b" strokeWidth="2" />
+        <Line x1={center - radius} y1={center} x2={center - radius + 5} y2={center} stroke="#64748b" strokeWidth="2" />
+        <Line x1={center + radius} y1={center} x2={center + radius - 5} y2={center} stroke="#64748b" strokeWidth="2" />
+        
+        <G rotation={heading} origin={`${center}, ${center}`}>
+          <Polygon points={`${center},${center - radius + 8} ${center - 6},${center + 10} ${center + 6},${center + 10}`} fill="#06b6d4" />
+        </G>
+      </Svg>
+      <View style={styles.compassTextContainer}>
+        <Text style={styles.compassSpeed}>{speed.toFixed(1)}</Text>
+        <Text style={styles.compassUnit}>m/s</Text>
+      </View>
+    </View>
+  );
+};
 
 const SensorBadge = ({ name, status }: { name: string, status: string }) => {
     let bg = '#334155';
@@ -91,8 +119,13 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
 
       {/* GPS STATS */}
       <View style={styles.grid}>
-        <StatBox label="Lat" value={safeFixed(position.latitude, 8)} unit="°" width="48%" color="#06b6d4" />
-        <StatBox label="Lon" value={safeFixed(position.longitude, 8)} unit="°" width="48%" color="#06b6d4" />
+        <View style={{ width: '65%', flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <StatBox label="Lat" value={safeFixed(position.latitude, 8)} unit="°" width="100%" color="#06b6d4" />
+            <StatBox label="Lon" value={safeFixed(position.longitude, 8)} unit="°" width="100%" color="#06b6d4" />
+        </View>
+        <View style={{ width: '30%', justifyContent: 'center', alignItems: 'center' }}>
+            <CompassWidget heading={position.bearing || 0} speed={position.speed || 0} />
+        </View>
         
         <StatBox label="Alt" value={safeFixed(position.altitude, 2)} unit="m" />
         <StatBox label="GDOP" value={safeFixed(position.gdop, 1)} unit="" color={(position.gdop || 5) < 2 ? '#4ade80' : '#fbbf24'} />
@@ -139,6 +172,16 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
           </View>
       )}
 
+      {/* CONSTELLATION BREAKDOWN */}
+      {position.constellationBreakdown && Object.keys(position.constellationBreakdown).length > 0 && (
+          <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+              <Text style={[styles.statLabel, { width: '100%', marginBottom: 4 }]}>CONSTELLATIONS IN USE</Text>
+              {Object.entries(position.constellationBreakdown).map(([constellation, count]) => (
+                  <StatBox key={constellation} label={constellation} value={count} unit="SVs" color="#cbd5e1" width="23%" />
+              ))}
+          </View>
+      )}
+
       {/* NTRIP / CORRECTIONS */}
       {position.rtkStatus !== 'NONE' && (
           <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
@@ -170,6 +213,9 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
               <StatBox label="USB DEVICE" value={usbStatus.deviceName} unit="" color="#a78bfa" width="100%" />
           </View>
       )}
+
+      {/* REAL-TIME IMU PLOT */}
+      <TelemetryPlot imu={imu} />
     </View>
   );
 };
@@ -252,6 +298,26 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#334155',
     paddingTop: 8,
+  },
+  compassContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  compassTextContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compassSpeed: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  compassUnit: {
+    color: '#94a3b8',
+    fontSize: 8,
   }
 });
 

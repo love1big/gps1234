@@ -854,16 +854,23 @@ export const calculatePosition = (
   REUSABLE_POSITION.satellitesVisible = sats.length;
   REUSABLE_POSITION.satellitesUsed = usedSats;
 
-  // Populate active signals
+  // Populate active signals and constellation breakdown
   const activeSignalsSet = new Set<string>();
+  const constellationBreakdown: Record<string, number> = {};
+  
   for (const sat of sats) {
-      if (sat.usedInFix && sat.signals) {
-          for (const sig of sat.signals) {
-              activeSignalsSet.add(sig);
+      if (sat.usedInFix) {
+          if (sat.signals) {
+              for (const sig of sat.signals) {
+                  activeSignalsSet.add(sig);
+              }
           }
+          const constellationName = sat.constellation;
+          constellationBreakdown[constellationName] = (constellationBreakdown[constellationName] || 0) + 1;
       }
   }
   REUSABLE_POSITION.activeSignals = Array.from(activeSignalsSet);
+  REUSABLE_POSITION.constellationBreakdown = constellationBreakdown;
 
   REUSABLE_POSITION.scanState = scanState;
   REUSABLE_POSITION.activity = fusionResult.activity;

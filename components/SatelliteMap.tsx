@@ -14,10 +14,11 @@ interface Props {
 }
 
 // Static Background
-const SkyplotBackground = memo(({ size, simple }: { size: number, simple: boolean }) => {
+const SkyplotBackground = memo(({ size, simple, heading }: { size: number, simple: boolean, heading: number }) => {
     const radius = size / 2 - 10;
     const center = size / 2;
     const getR = (el: number) => radius * (1 - el / 90);
+    const textRot = Number.isNaN(heading) ? 0 : heading;
 
     return (
         <G>
@@ -30,6 +31,20 @@ const SkyplotBackground = memo(({ size, simple }: { size: number, simple: boolea
             )}
             <Line x1={center - radius} y1={center} x2={center + radius} y2={center} stroke="#334155" />
             <Line x1={center} y1={center - radius} x2={center} y2={center + radius} stroke="#334155" />
+            
+            {/* Cardinal Directions */}
+            <G x={center} y={center - radius - 2} origin={`${center}, ${center - radius - 2}`} rotation={textRot}>
+                <SvgText fill="#64748b" fontSize="10" fontWeight="bold" textAnchor="middle">N</SvgText>
+            </G>
+            <G x={center} y={center + radius + 10} origin={`${center}, ${center + radius + 10}`} rotation={textRot}>
+                <SvgText fill="#64748b" fontSize="10" fontWeight="bold" textAnchor="middle">S</SvgText>
+            </G>
+            <G x={center + radius + 4} y={center + 4} origin={`${center + radius + 4}, ${center + 4}`} rotation={textRot}>
+                <SvgText fill="#64748b" fontSize="10" fontWeight="bold" textAnchor="start">E</SvgText>
+            </G>
+            <G x={center - radius - 4} y={center + 4} origin={`${center - radius - 4}, ${center + 4}`} rotation={textRot}>
+                <SvgText fill="#64748b" fontSize="10" fontWeight="bold" textAnchor="end">W</SvgText>
+            </G>
         </G>
     );
 });
@@ -80,7 +95,7 @@ const SatelliteMap: React.FC<Props> = memo(({ satellites, heading, limitCount = 
       <View style={styles.mapContainer}>
         <Svg height={size} width={size}>
           <G origin={`${center}, ${center}`} rotation={Number.isNaN(heading) ? 0 : -heading}>
-             <SkyplotBackground size={size} simple={isSimple} />
+             <SkyplotBackground size={size} simple={isSimple} heading={heading} />
              {renderList.map((sat) => {
                 // OPTIMIZATION: Pre-calculate coordinates
                 const theta = (sat.azimuth - 90) * (Math.PI / 180);

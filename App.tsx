@@ -16,6 +16,7 @@ import { MavlinkBroadcaster } from './services/mavlinkBroadcaster'; // NEW
 import { AntiSpoofingEngine } from './services/antiSpoofingEngine'; // NEW
 import { FirmwareManager } from './services/firmwareEngine'; // NEW
 import { sanitizePosition } from './services/dataSanitizer'; // MIL-SPEC SANITIZER
+import { generateGGA, generateRMC, generateGSV, generateUbxNavPvt } from './utils/nmeaGenerator'; // NMEA/UBX Generators
 import { INITIAL_POSITION } from './constants';
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
@@ -100,7 +101,6 @@ const SecurityLockout = ({ reason }: { reason: string }) => (
         <StatusBar barStyle="light-content" backgroundColor="#000" />
         <Text style={styles.lockoutIcon}>🔒</Text>
         <Text style={styles.lockoutTitle}>SECURITY VIOLATION</Text>
-        <Text style={styles.lockoutTitle}>SECURITY VIOLATION</Text>
         <Text style={styles.lockoutReason}>CODE: {reason}</Text>
     </View>
 );
@@ -169,7 +169,13 @@ export default function App() {
     baseStationLat: INITIAL_POSITION.latitude,
     baseStationLon: INITIAL_POSITION.longitude,
     baseStationAlt: INITIAL_POSITION.altitude,
-    correctionDataQuality: 0.9
+    correctionDataQuality: 0.9,
+    nmeaGgaEnabled: true,
+    nmeaRmcEnabled: true,
+    nmeaGsvEnabled: false,
+    ubxNavPvtEnabled: false,
+    outputFrequency: 1,
+    logOutputToTerminal: false
   });
 
   // BATCHED STATE
@@ -191,6 +197,7 @@ export default function App() {
   const isProcessingRef = useRef(false); 
   const lastUiUpdateRef = useRef(0);
   const lastUsbCheckRef = useRef(0);
+  const lastOutputTimeRef = useRef(0);
   const appState = useRef(AppState.currentState);
   const engineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hardwareWatchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -478,6 +485,47 @@ export default function App() {
                   
                   if (internalResult.log) addLog(internalResult.log.module, internalResult.log.message, internalResult.log.level);
                   
+                  // --- NMEA & UBX GENERATION ---
+                  const shouldGenerateOutput = 
+                      configRef.current.nmeaGgaEnabled || 
+                      configRef.current.nmeaRmcEnabled || 
+                      configRef.current.nmeaGsvEnabled || 
+                      configRef.current.ubxNavPvtEnabled;
+
+                  if (shouldGenerateOutput) {
+                      // Check output frequency (e.g., 1Hz = 1000ms, 5Hz = 200ms)
+                      const outputIntervalMs = 1000 / configRef.current.outputFrequency;
+                      
+                      // Use a ref to track last output time to avoid adding too many refs to the component
+                      if (!lastOutputTimeRef.current) lastOutputTimeRef.current = 0;
+                      
+                      if (now - lastOutputTimeRef.current >= outputIntervalMs) {
+                          lastOutputTimeRef.current = now;
+                          const outputTime = new Date(now);
+                          const generatedSentences: string[] = [];
+
+                          if (configRef.current.nmeaGgaEnabled) {
+                              generatedSentences.push(generateGGA(positionRef.current, outputTime));
+                          }
+                          if (configRef.current.nmeaRmcEnabled) {
+                              generatedSentences.push(generateRMC(positionRef.current, outputTime));
+                          }
+                          if (configRef.current.nmeaGsvEnabled) {
+                              generatedSentences.push(...generateGSV(genResult.sats));
+                          }
+                          if (configRef.current.ubxNavPvtEnabled) {
+                              generatedSentences.push(generateUbxNavPvt(positionRef.current, outputTime));
+                          }
+
+                          // In a real app, this is where you would send the data to a serial port, TCP socket, or Bluetooth SPP.
+                          // For this demo, we log it to the terminal if enabled.
+                          if (configRef.current.logOutputToTerminal && generatedSentences.length > 0) {
+                              // To prevent flooding the UI, we might only log one sentence per cycle or batch them
+                              addLog('NMEA/UBX', generatedSentences.join('\n'), 'info');
+                          }
+                      }
+                  }
+
                   lastUiUpdateRef.current = now;
               }
 
@@ -651,7 +699,13 @@ export default function App() {
                     </Text>
                 </View>
                 <View style={styles.statusBadge}>
-                    <Text style={[styles.statusText, { color: getHeaderColor() }]}>● {resourceState.quality === 'DEEP_SLEEP' ? 'STANDBY' : 'ACTIVE'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <Text style={[styles.statusText, { color: getHeaderColor(), marginRight: 8 }]}>● {resourceState.quality === 'DEEP_SLEEP' ? 'STANDBY' : 'ACTIVE'}</Text>
+                        <View style={styles.batteryContainer}>
+                            <View style={[styles.batteryFill, { width: `${batteryLevel * 100}%`, backgroundColor: batteryLevel > 0.2 ? '#4ade80' : '#ef4444' }]} />
+                            <Text style={styles.batteryText}>{(batteryLevel * 100).toFixed(0)}%</Text>
+                        </View>
+                    </View>
                     {config.smartStandby && <Text style={[styles.ecoBadge, {borderColor: '#06b6d4', color: '#06b6d4'}]}>SMART_PWR</Text>}
                     {dashboard.usbStatus.connected && <Text style={[styles.ecoBadge, {borderColor: '#ec4899', color: '#ec4899'}]}>USB DRIVER</Text>}
                 </View>
@@ -741,6 +795,9 @@ const styles = StyleSheet.create({
   subtitle: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
   statusBadge: { alignItems: 'flex-end' },
   statusText: { fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontWeight: 'bold' },
+  batteryContainer: { width: 24, height: 12, borderWidth: 1, borderColor: '#64748b', borderRadius: 2, padding: 1, justifyContent: 'center', position: 'relative' },
+  batteryFill: { height: '100%', borderRadius: 1 },
+  batteryText: { position: 'absolute', width: '100%', textAlign: 'center', fontSize: 6, color: '#fff', fontWeight: 'bold' },
   ecoBadge: { fontSize: 9, color: '#eab308', borderWidth: 1, borderColor: '#a16207', paddingHorizontal: 4, borderRadius: 3, marginTop: 4 },
   section: { marginBottom: 20 },
   panel: { backgroundColor: '#1e293b', borderRadius: 12, borderWidth: 1, borderColor: '#334155', padding: 16, marginBottom: 20 },
