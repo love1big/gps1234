@@ -8,6 +8,8 @@ export interface MitigationResult {
     biasCorrected: boolean;
     jammingProbability: number;
     spoofingProbability: number;
+    raimStatus: 'NONE' | 'FD' | 'FDE'; // Fault Detection, Fault Detection & Exclusion
+    excludedSatellites: number;
 }
 
 // Simple atmospheric model (Klobuchar-like for Ionosphere + Hopfield-like for Troposphere)
@@ -213,12 +215,43 @@ export const runMitigationPipeline = (
         correctedPosition.altitude -= (avgAtmoDelay * 0.5);
     }
 
-    // 3. IMU Sensor Bias Correction
+    // 3. IMU Sensor Bias Correction & ZUPT (Zero Velocity Update)
     const correctedIMU = biasEstimator.updateAndCorrect(imu, isStationary);
+    if (isStationary) {
+        // ZUPT: If we are physically stationary, force speed to 0 to prevent drift
+        correctedPosition.speed = 0;
+    }
 
     // 4. Anti-Jamming and Anti-Spoofing Detection
     const jammingProbability = detectJamming(sats, isStationary, config.environment);
     const spoofingProbability = detectSpoofing(sats, pos, imu, isStationary);
+
+    // 5. RAIM (Receiver Autonomous Integrity Monitoring)
+    let raimStatus: 'NONE' | 'FD' | 'FDE' = 'NONE';
+    let excludedSatellites = 0;
+    
+    // RAIM requires redundant satellites. 
+    // 4 = 3D Fix, 5 = Fault Detection (FD), 6+ = Fault Detection & Exclusion (FDE)
+    if (validSats >= 6) {
+        raimStatus = 'FDE';
+        // Simulate FDE: Exclude satellites with extreme multipath or low SNR
+        sats.forEach(sat => {
+            if (sat.usedInFix && (sat.snr < 15 || detectMultipath(sat, config.environment))) {
+                excludedSatellites++;
+            }
+        });
+        
+        // If we excluded faulty satellites, improve the reported accuracy
+        if (excludedSatellites > 0) {
+            correctedPosition.accuracy = Math.max(1.0, correctedPosition.accuracy * 0.8);
+        }
+    } else if (validSats === 5) {
+        raimStatus = 'FD';
+        // Can detect a fault but not exclude it. If multipath is high, degrade accuracy.
+        if (multipathDetected) {
+            correctedPosition.accuracy *= 1.2;
+        }
+    }
 
     return {
         correctedPosition,
@@ -227,6 +260,8 @@ export const runMitigationPipeline = (
         atmosphericDelayMeters: avgAtmoDelay,
         biasCorrected: biasEstimator.getStatus(),
         jammingProbability,
-        spoofingProbability
+        spoofingProbability,
+        raimStatus,
+        excludedSatellites
     };
 };

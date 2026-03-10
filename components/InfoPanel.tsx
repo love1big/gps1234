@@ -165,7 +165,8 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
 
       {/* SECURITY & INTEGRITY */}
       <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
-          <StatBox label="INTEGRITY" value={position.integrityState} unit="" color={position.integrityState === 'TRUSTED' ? '#4ade80' : position.integrityState === 'SUSPICIOUS' ? '#fbbf24' : '#ef4444'} width="100%" />
+          <StatBox label="INTEGRITY" value={position.integrityState} unit="" color={position.integrityState === 'TRUSTED' ? '#4ade80' : position.integrityState === 'SUSPICIOUS' ? '#fbbf24' : '#ef4444'} width="48%" />
+          <StatBox label="RAIM" value={position.raimStatus || 'NONE'} unit={position.excludedSatellites ? `(-${position.excludedSatellites} SV)` : ''} color={position.raimStatus === 'FDE' ? '#4ade80' : position.raimStatus === 'FD' ? '#fbbf24' : '#94a3b8'} width="48%" />
           <StatBox label="JAMMING" value={`${Math.round(position.jammingProbability || 0)}`} unit="%" color={(position.jammingProbability || 0) > 40 ? '#ef4444' : '#4ade80'} width="48%" />
           <StatBox label="SPOOFING" value={`${Math.round(position.spoofingProbability || 0)}`} unit="%" color={(position.spoofingProbability || 0) > 30 ? '#ef4444' : '#4ade80'} width="48%" />
       </View>

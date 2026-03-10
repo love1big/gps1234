@@ -294,6 +294,8 @@ export interface PositionData {
   tunnelDistance?: number; // NEW: Distance traveled in tunnel
   activeSignals?: string[]; // Array of unique active signals
   constellationBreakdown?: Record<string, number>; // Count of used satellites per constellation
+  raimStatus?: 'NONE' | 'FD' | 'FDE';
+  excludedSatellites?: number;
 }
 
 export interface NetworkStats {

@@ -918,6 +918,10 @@ export const calculatePosition = (
   // Apply Jamming and Spoofing Probabilities
   mitigationResult.correctedPosition.jammingProbability = mitigationResult.jammingProbability;
   mitigationResult.correctedPosition.spoofingProbability = mitigationResult.spoofingProbability;
+  
+  // Apply RAIM
+  mitigationResult.correctedPosition.raimStatus = mitigationResult.raimStatus;
+  mitigationResult.correctedPosition.excludedSatellites = mitigationResult.excludedSatellites;
 
   // Update Integrity State based on threats
   if (mitigationResult.spoofingProbability > 70 || mitigationResult.jammingProbability > 80) {

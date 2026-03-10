@@ -416,6 +416,18 @@ const SettingsPanel: React.FC<Props> = ({ config, onUpdateConfig, onManualAgpsUp
                       />
                   </View>
                   <View style={styles.sliderContainer}>
+                      <Text style={styles.sliderLabel}>Base Station Altitude: {config.baseStationAlt.toFixed(1)} m</Text>
+                      <Slider 
+                          minimumValue={-100} maximumValue={5000} step={0.1} 
+                          value={config.baseStationAlt} 
+                          onValueChange={(val) => onUpdateConfig({ baseStationAlt: val })} 
+                          minimumTrackTintColor="#a855f7"
+                          maximumTrackTintColor="#334155"
+                          thumbTintColor="#a855f7"
+                          style={{ width: '100%', height: 40 }} 
+                      />
+                  </View>
+                  <View style={styles.sliderContainer}>
                       <Text style={styles.sliderLabel}>Correction Data Quality: {(config.correctionDataQuality * 100).toFixed(0)}%</Text>
                       <Slider 
                           minimumValue={0} maximumValue={1} step={0.01} 
