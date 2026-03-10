@@ -180,14 +180,22 @@ export default function App() {
 
   // BATCHED STATE
   const [dashboard, setDashboard] = useState<DashboardState>(INITIAL_DASHBOARD);
+  const dashboardRef = useRef<DashboardState>(INITIAL_DASHBOARD);
   
   const [driverStatus, setDriverStatus] = useState<InjectionStatus>('IDLE');
   const [securityState, setSecurityState] = useState<{locked: boolean, reason: string}>({ locked: false, reason: '' });
+  const securityStateRef = useRef<{locked: boolean, reason: string}>({ locked: false, reason: '' });
   const [config, setConfigState] = useState<GNSSConfig>(configRef.current);
   const [batteryLevel, setBatteryLevel] = useState(1.0); 
+  const batteryLevelRef = useRef(1.0);
   const [logs, setLogs] = useState<LogEntry[]>([]); 
   const [baselineSats, setBaselineSats] = useState<number | null>(null); 
+  const baselineSatsRef = useRef<number | null>(null);
   const [resourceState, setResourceState] = useState<ResourceState>({ 
+      loadLevel: 0, quality: 'HIGH', memoryPressure: 'NORMAL', lastPurgeTime: 0, fpsEstimate: 60,
+      renderComplexity: 'FULL', thermalThrottling: false
+  });
+  const resourceStateRef = useRef<ResourceState>({ 
       loadLevel: 0, quality: 'HIGH', memoryPressure: 'NORMAL', lastPurgeTime: 0, fpsEstimate: 60,
       renderComplexity: 'FULL', thermalThrottling: false
   });
@@ -256,11 +264,13 @@ export default function App() {
           if (sec.isCompromised) {
               triggerSelfDestruct();
               setSecurityState({ locked: true, reason: sec.reason });
+              securityStateRef.current = { locked: true, reason: sec.reason };
               return;
           }
           try {
               const level = await Battery.getBatteryLevelAsync();
               setBatteryLevel(level);
+              batteryLevelRef.current = level;
           } catch (e) {}
           
           // Initial External Hardware Scan
@@ -319,7 +329,7 @@ export default function App() {
   };
 
   const runEngineCycle = async () => {
-      if (isProcessingRef.current || securityState.locked) return;
+      if (isProcessingRef.current || securityStateRef.current.locked) return;
       isProcessingRef.current = true;
 
       const startTime = Date.now();
@@ -327,7 +337,7 @@ export default function App() {
       const isBackground = !!appState.current.match(/inactive|background/);
       
       // MOTION SENSING for Wake-on-Motion
-      const isMoving = inputPos.speed > 0.1 || Math.abs((dashboard.imu.accelX || 0) + (dashboard.imu.accelY || 0) + (dashboard.imu.accelZ || 0) - 1.0) > 0.1;
+      const isMoving = inputPos.speed > 0.1 || Math.abs((dashboardRef.current.imu.accelX || 0) + (dashboardRef.current.imu.accelY || 0) + (dashboardRef.current.imu.accelZ || 0) - 1.0) > 0.1;
       updateMotionState(isMoving, 100);
 
       // --- ADVANCED TIMING CONTROL (SMART STANDBY) ---
@@ -352,13 +362,13 @@ export default function App() {
           }
       } else {
           // FOREGROUND LOGIC
-          if (configRef.current.smartStandby && resourceState.quality === 'DEEP_SLEEP' && !isMoving) {
+          if (configRef.current.smartStandby && resourceStateRef.current.quality === 'DEEP_SLEEP' && !isMoving) {
               nextDelay = 5000; // 5s deep sleep while parked/static
               powerProfile = 'ULTRA_LOW';
           } else if (configRef.current.operationMode === 'BACKGROUND_ECO') {
               nextDelay = 100; // ~10Hz (8-10 times per sec)
               powerProfile = 'LOW_POWER';
-          } else if (batteryLevel < 0.15) {
+          } else if (batteryLevelRef.current < 0.15) {
               nextDelay = 100; // ~10Hz (8-10 times per sec)
               powerProfile = 'LOW_POWER';
           }
@@ -375,7 +385,7 @@ export default function App() {
 
       try {
           // --- MILITARY GRADE THERMAL PROTECTION ---
-          if (resourceState.thermalThrottling) {
+          if (resourceStateRef.current.thermalThrottling) {
               nextDelay = Math.max(nextDelay, 5000); // Force at least 5s delay to cool down
               powerProfile = 'ULTRA_LOW';
               if (Math.random() < 0.1) addLog('SYS', 'THERMAL THROTTLING ACTIVE - COOLING DOWN', 'warn');
@@ -384,7 +394,10 @@ export default function App() {
           const targetSats = isBackground ? 8 : 24;
           const genResult = generateSatellites(targetSats + 4, configRef.current, configRef.current.boostInternal, powerProfile === 'LOW_POWER' || powerProfile === 'ULTRA_LOW', false, undefined, isBackground);
           
-          if (baselineSats === null && genResult.sats.length >= 4) setBaselineSats(genResult.sats.length);
+          if (baselineSatsRef.current === null && genResult.sats.length >= 4) {
+              setBaselineSats(genResult.sats.length);
+              baselineSatsRef.current = genResult.sats.length;
+          }
 
           const internalResult = calculatePosition(
               inputPos,
@@ -395,7 +408,7 @@ export default function App() {
               false,
               genResult.scanState,
               isBackground,
-              batteryLevel
+              batteryLevelRef.current
           );
 
           positionRef.current = { ...internalResult.position };
@@ -415,7 +428,7 @@ export default function App() {
           }
 
           // --- CLOCK SYNC WITH GPS ---
-          if (configRef.current.syncClockWithGps && ((dashboard.usbStatus && dashboard.usbStatus.connected) || (BluetoothManager.getStatus() && BluetoothManager.getStatus()?.connected))) {
+          if (configRef.current.syncClockWithGps && ((dashboardRef.current.usbStatus && dashboardRef.current.usbStatus.connected) || (BluetoothManager.getStatus() && BluetoothManager.getStatus()?.connected))) {
               // In a real app, this would require root/system permissions to set the system clock.
               // Here we simulate the sync by logging it and potentially adjusting an internal offset.
               if (Math.random() > 0.98) {
@@ -445,8 +458,8 @@ export default function App() {
               
               // Dynamic UI Throttling based on Resource Governor
               let uiThreshold = 32; // ~30fps
-              if (resourceState.quality === 'DEEP_SLEEP') uiThreshold = 2000;
-              else if (resourceState.quality === 'ECO') uiThreshold = 1000;
+              if (resourceStateRef.current.quality === 'DEEP_SLEEP') uiThreshold = 2000;
+              else if (resourceStateRef.current.quality === 'ECO') uiThreshold = 1000;
 
               if (timeSinceLastUi > uiThreshold) {
                   // OPTIMIZATION: BATCHED UPDATE
@@ -472,15 +485,17 @@ export default function App() {
                       if (nextTrigger > Number.MAX_SAFE_INTEGER - 1000) {
                           nextTrigger = 0;
                       }
-                      return {
+                      const newState = {
                           position: sanitizePosition({ ...positionRef.current }),
                           imu: internalResult.imu,
                           sensorStatus: internalResult.sensorStatus,
                           network: calculateNetworkStats(configRef.current),
                           usbStatus: currentUsbStatus,
-                          sats: genResult.sats, // ZERO-COPY reference pass
+                          sats: [...genResult.sats], // Shallow copy to avoid concurrent rendering tearing
                           renderTrigger: nextTrigger // Force sub-components to know time changed
                       };
+                      dashboardRef.current = newState;
+                      return newState;
                   });
                   
                   if (internalResult.log) addLog(internalResult.log.module, internalResult.log.message, internalResult.log.level);
@@ -533,6 +548,7 @@ export default function App() {
                  const loopDuration = now - startTime;
                  const rStats = monitorPerformance(loopDuration);
                  setResourceState(rStats);
+                 resourceStateRef.current = rStats;
                  if (shouldPurgeMemory(rStats)) { 
                      flushEngineBuffers(); 
                      setLogs([]); 
@@ -676,7 +692,7 @@ export default function App() {
   const getHeaderColor = () => {
       if (dashboard.position.integrityState === 'COMPROMISED') return '#ef4444';
       if (resourceState.quality === 'DEEP_SLEEP') return '#64748b'; // Gray for sleep
-      if (dashboard.position.scanState === 'TUNNEL_COASTING') return '#facc15'; // Yellow for Tunnel
+      if (dashboard.position.scanState === 'DEAD_RECKONING') return '#facc15'; // Yellow for Tunnel
       if (config.operationMode === 'URBAN_CANYON') return '#f97316'; 
       if (config.operationMode === 'PRECISE_SURVEY') return '#a855f7'; 
       if (config.operationMode === 'BACKGROUND_ECO') return '#0ea5e9'; 
@@ -694,7 +710,7 @@ export default function App() {
                     <Text style={styles.title}>OMNI<Text style={styles.titleAccent}>GNSS</Text> <Text style={styles.titlePro}>ENHANCER</Text></Text>
                     <Text style={styles.subtitle}>
                         {resourceState.quality === 'DEEP_SLEEP' ? 'SLEEPING (WAKE-ON-MOTION)' : 
-                         dashboard.position.scanState === 'TUNNEL_COASTING' ? 'DEAD RECKONING (TUNNEL)' :
+                         dashboard.position.scanState === 'DEAD_RECKONING' ? 'DEAD RECKONING (INS)' :
                          `${config.operationMode} • ${driverStatus === 'MOUNTED' ? 'ROOT MODE' : 'PASSTHROUGH'}`}
                     </Text>
                 </View>

@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Platform, DimensionValue } from 'react-native';
 import Svg, { Circle, Line, Polygon, G, Text as SvgText } from 'react-native-svg';
 import { PositionData, IMUData, NetworkStats, SensorStatus, UsbDeviceStatus } from '../types';
 import TelemetryPlot from './TelemetryPlot';
+import { latLonToMgrs, latLonToUtm } from '../utils/coordinateConverter';
 
 interface Props {
   position: PositionData;
@@ -98,6 +99,9 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
       rtkText = `PPP ${position.convergenceProgress?.toFixed(0)}%`;
   }
 
+  const mgrsCoord = latLonToMgrs(position.latitude, position.longitude);
+  const utmCoord = latLonToUtm(position.latitude, position.longitude);
+
   return (
     <View style={styles.container}>
       {/* SENSORS */}
@@ -127,6 +131,12 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
             <CompassWidget heading={position.bearing || 0} speed={position.speed || 0} />
         </View>
         
+        {/* MILITARY COORDINATES */}
+        <View style={{ width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, marginBottom: 4 }}>
+            <StatBox label="MGRS" value={mgrsCoord} unit="" width="100%" color="#10b981" />
+            <StatBox label="UTM" value={utmCoord} unit="" width="100%" color="#8b5cf6" />
+        </View>
+
         <StatBox label="Alt" value={safeFixed(position.altitude, 2)} unit="m" />
         <StatBox label="GDOP" value={safeFixed(position.gdop, 1)} unit="" color={(position.gdop || 5) < 2 ? '#4ade80' : '#fbbf24'} />
         
@@ -151,6 +161,13 @@ const InfoPanel: React.FC<Props> = ({ position, imu, network, sensorStatus, usbS
                 <StatBox label="HPL / VPL" value={`${(position.hpl||0).toFixed(0)}/${(position.vpl||0).toFixed(0)}`} unit="m" width="48%" color="#fca5a5" />
              </>
         )}
+      </View>
+
+      {/* SECURITY & INTEGRITY */}
+      <View style={[styles.grid, { borderTopWidth: 1, borderTopColor: '#334155', paddingTop: 8 }]}>
+          <StatBox label="INTEGRITY" value={position.integrityState} unit="" color={position.integrityState === 'TRUSTED' ? '#4ade80' : position.integrityState === 'SUSPICIOUS' ? '#fbbf24' : '#ef4444'} width="100%" />
+          <StatBox label="JAMMING" value={`${Math.round(position.jammingProbability || 0)}`} unit="%" color={(position.jammingProbability || 0) > 40 ? '#ef4444' : '#4ade80'} width="48%" />
+          <StatBox label="SPOOFING" value={`${Math.round(position.spoofingProbability || 0)}`} unit="%" color={(position.spoofingProbability || 0) > 30 ? '#ef4444' : '#4ade80'} width="48%" />
       </View>
 
       {/* RF LANDSCAPE STATS */}

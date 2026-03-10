@@ -6,6 +6,8 @@ export interface MitigationResult {
     multipathDetected: boolean;
     atmosphericDelayMeters: number;
     biasCorrected: boolean;
+    jammingProbability: number;
+    spoofingProbability: number;
 }
 
 // Simple atmospheric model (Klobuchar-like for Ionosphere + Hopfield-like for Troposphere)
@@ -90,6 +92,88 @@ class SensorBiasEstimator {
 
 const biasEstimator = new SensorBiasEstimator();
 
+// Anti-Jamming Heuristics
+export const detectJamming = (sats: Satellite[], isStationary: boolean, environment: GNSSConfig['environment']): number => {
+    if (sats.length === 0) return 0;
+    
+    let totalSnr = 0;
+    let trackedCount = 0;
+    
+    sats.forEach(sat => {
+        if (sat.status === 'tracking' || sat.usedInFix) {
+            totalSnr += sat.snr;
+            trackedCount++;
+        }
+    });
+    
+    if (trackedCount === 0) return 0;
+    
+    const avgSnr = totalSnr / trackedCount;
+    let jammingProb = 0;
+    
+    // If average SNR drops below 25 dBHz, it's highly suspicious, especially if not in dense urban
+    if (avgSnr < 25) {
+        jammingProb += (25 - avgSnr) * 5; 
+    }
+    
+    // If we see many satellites but can track very few, it might be broadband jamming
+    if (sats.length > 15 && trackedCount < 4) {
+        jammingProb += 30;
+    }
+    
+    // Environment context: Urban canyons naturally have lower SNR, so reduce false positives
+    if (environment === 'dense_urban') {
+        jammingProb *= 0.6;
+    } else if (environment === 'open_sky') {
+        jammingProb *= 1.5; // Open sky should have excellent SNR; if it doesn't, suspect jamming
+    }
+    
+    return Math.min(100, Math.max(0, jammingProb));
+};
+
+// Anti-Spoofing Heuristics
+export const detectSpoofing = (sats: Satellite[], pos: PositionData, imu: IMUData, isStationary: boolean): number => {
+    if (sats.length === 0) return 0;
+    
+    let spoofingProb = 0;
+    let totalSnr = 0;
+    let trackedCount = 0;
+    
+    sats.forEach(sat => {
+        if (sat.status === 'tracking' || sat.usedInFix) {
+            totalSnr += sat.snr;
+            trackedCount++;
+        }
+    });
+    
+    if (trackedCount > 0) {
+        const avgSnr = totalSnr / trackedCount;
+        let snrVariance = 0;
+        
+        sats.forEach(sat => {
+            if (sat.status === 'tracking' || sat.usedInFix) {
+                snrVariance += Math.pow(sat.snr - avgSnr, 2);
+            }
+        });
+        snrVariance /= trackedCount;
+        
+        // Spoofers often transmit all signals at the exact same power level
+        // Real signals have high variance due to different elevations and multipath
+        if (snrVariance < 2.0 && avgSnr > 40) {
+            spoofingProb += 60; // Highly suspicious: strong, uniform signals
+        }
+    }
+    
+    // Position jump check: If speed is impossible given IMU data
+    const imuAccelMagnitude = Math.sqrt(Math.pow(imu.accelX, 2) + Math.pow(imu.accelY, 2) + Math.pow(imu.accelZ - 1.0, 2));
+    if (pos.speed > 30 && imuAccelMagnitude < 0.1 && isStationary) {
+        // We are supposedly moving at 108 km/h, but IMU says we are perfectly still
+        spoofingProb += 80;
+    }
+    
+    return Math.min(100, Math.max(0, spoofingProb));
+};
+
 export const runMitigationPipeline = (
     pos: PositionData,
     imu: IMUData,
@@ -132,11 +216,17 @@ export const runMitigationPipeline = (
     // 3. IMU Sensor Bias Correction
     const correctedIMU = biasEstimator.updateAndCorrect(imu, isStationary);
 
+    // 4. Anti-Jamming and Anti-Spoofing Detection
+    const jammingProbability = detectJamming(sats, isStationary, config.environment);
+    const spoofingProbability = detectSpoofing(sats, pos, imu, isStationary);
+
     return {
         correctedPosition,
         correctedIMU,
         multipathDetected,
         atmosphericDelayMeters: avgAtmoDelay,
-        biasCorrected: biasEstimator.getStatus()
+        biasCorrected: biasEstimator.getStatus(),
+        jammingProbability,
+        spoofingProbability
     };
 };

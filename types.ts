@@ -40,7 +40,7 @@ export type EnvironmentProfile = 'open_sky' | 'suburban' | 'dense_urban';
 export type ActivityState = 'STILL' | 'WALKING' | 'RUNNING' | 'DRIVING' | 'UNKNOWN';
 export type SystemHealthStatus = 'OPTIMAL' | 'STABLE' | 'DEGRADED' | 'CRITICAL';
 export type IntegrityState = 'TRUSTED' | 'SUSPICIOUS' | 'COMPROMISED'; 
-export type SystemScanState = 'LOCKED' | 'SEARCHING_L1' | 'SEARCHING_L5' | 'SEARCHING_MULTI' | 'DEAD_RECKONING' | 'TUNNEL_COASTING'; // Added TUNNEL
+export type SystemScanState = 'LOCKED' | 'SEARCHING_L1' | 'SEARCHING_L5' | 'SEARCHING_MULTI' | 'DEAD_RECKONING';
 
 export interface RfEmitter {
     id: string; 

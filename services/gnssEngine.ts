@@ -190,8 +190,9 @@ const validateStateIntegrity = () => {
     if (Math.abs(FILTER_STATE[0]) > 20000000 || Math.abs(FILTER_STATE[1]) > 20000000) return false;
 
     // Check Covariance Explosion
-    if (COVARIANCE[0] < 0 || !Number.isFinite(COVARIANCE[0]) || COVARIANCE[0] > 1e12) return false;
-    if (COVARIANCE[7] < 0 || !Number.isFinite(COVARIANCE[7]) || COVARIANCE[7] > 1e12) return false;
+    for (let i = 0; i < 36; i += 7) {
+        if (COVARIANCE[i] < 0 || !Number.isFinite(COVARIANCE[i]) || COVARIANCE[i] > 1e12) return false;
+    }
     
     return true;
 }
@@ -320,16 +321,16 @@ const getAutoSearchState = (isLost: boolean, lostDuration: number): SystemScanSt
     }
     if (signalLossStartTime === 0) signalLossStartTime = Date.now();
     
-    // SMART TUNNEL DETECTION
-    // Require plausible velocity (>10m/s) and integrity to enter tunnel
-    if (tunnelEntryTime === 0 && tunnelVelocity > 10 && validateStateIntegrity()) {
+    // SMART DEAD RECKONING DETECTION
+    // Require plausible velocity (>0.5m/s) and integrity to enter dead reckoning
+    if (tunnelEntryTime === 0 && tunnelVelocity > 0.5 && validateStateIntegrity()) {
         tunnelEntryTime = Date.now();
-        return 'TUNNEL_COASTING';
+        return 'DEAD_RECKONING';
     }
     
-    if (tunnelEntryTime > 0) return 'TUNNEL_COASTING';
+    if (tunnelEntryTime > 0) return 'DEAD_RECKONING';
 
-    if (lostDuration < 5000) return 'DEAD_RECKONING'; 
+    if (lostDuration < 5000) return 'SEARCHING_L1'; 
     const cycle = Math.floor(lostDuration / 3000) % 3;
     if (cycle === 0) return 'SEARCHING_L1';
     if (cycle === 1) return 'SEARCHING_L5';
@@ -408,7 +409,7 @@ export const generateSatellites = (
     
     const availableConstellations = Object.values(Constellation); 
 
-    if (scanState === 'TUNNEL_COASTING') {
+    if (scanState === 'DEAD_RECKONING') {
         return { sats: ACTIVE_SATELLITES_BUFFER, scanState };
     }
 
@@ -495,7 +496,7 @@ export const generateSatellites = (
         let minSnr = 15;
 
         // "Under Expressway" / Signal Recovery Logic
-        if (isSignalLost || scanState.startsWith('SEARCHING') || scanState === 'DEAD_RECKONING') {
+        if (isSignalLost || scanState.startsWith('SEARCHING')) {
             elevationMask = -5; 
             minSnr = 8; 
             
@@ -635,15 +636,30 @@ export const calculatePosition = (
   
   // --- TUNNEL MODE & INERTIAL DEAD RECKONING (PHYSICS ENGINE) ---
   let isTunnelMode = false;
-  if (config.tunnelMode && scanState === 'TUNNEL_COASTING') {
+  if (config.tunnelMode && scanState === 'DEAD_RECKONING') {
       isTunnelMode = true;
-      tunnelDistTraveled += currentSpeed * dt;
+      tunnelDistTraveled += tunnelVelocity * dt;
       
-      // Decay velocity
-      const friction = 0.998; 
-      tunnelVelocity *= friction; 
+      if (imu.source === 'REAL' && config.sensorFusion) {
+          // Use accelerometer to update velocity
+          const safeAccelX = Number.isFinite(imu.accelX) ? imu.accelX : 0;
+          const safeAccelY = Number.isFinite(imu.accelY) ? imu.accelY : 0;
+          const accMag = Math.sqrt(safeAccelX * safeAccelX + safeAccelY * safeAccelY);
+          // Simple heuristic: if there is significant acceleration, increase velocity, else decay
+          if (accMag > 0.5) {
+              tunnelVelocity += (accMag * 0.1 * dt); // Add a fraction of acceleration
+          } else {
+              tunnelVelocity *= 0.998; // Decay
+          }
+      } else {
+          // Decay velocity if no real IMU
+          const friction = 0.998; 
+          tunnelVelocity *= friction; 
+      }
       
       if (tunnelVelocity < 0.5) tunnelVelocity = 0;
+      // Cap velocity to realistic max (e.g., 40 m/s for a car)
+      if (tunnelVelocity > 40) tunnelVelocity = 40;
 
   } else {
       // Not in tunnel, update reference velocity from GPS
@@ -660,7 +676,8 @@ export const calculatePosition = (
 
   if (isTunnelMode) {
       // KINEMATIC UPDATE
-      const gyroTurn = imu.gyroZ * dt * RAD_TO_DEG; 
+      const safeGyroZ = Number.isFinite(imu.gyroZ) ? imu.gyroZ : 0;
+      const gyroTurn = safeGyroZ * dt * RAD_TO_DEG; 
       tunnelHeading = (tunnelHeading + gyroTurn + 360) % 360;
       
       const rad = tunnelHeading * DEG_TO_RAD;
@@ -853,6 +870,10 @@ export const calculatePosition = (
   REUSABLE_POSITION.gdop = parseFloat(gdop.toFixed(1)); 
   REUSABLE_POSITION.satellitesVisible = sats.length;
   REUSABLE_POSITION.satellitesUsed = usedSats;
+  
+  // Update HPL/VPL to simulate growing error ellipse during Dead Reckoning
+  REUSABLE_POSITION.hpl = isTunnelMode ? Math.min(500, 10 + tunnelDistTraveled * 0.5) : Math.sqrt(COVARIANCE[0] + COVARIANCE[7]) * 2;
+  REUSABLE_POSITION.vpl = isTunnelMode ? Math.min(500, 15 + tunnelDistTraveled * 0.5) : Math.sqrt(COVARIANCE[14] + COVARIANCE[21]) * 2;
 
   // Populate active signals and constellation breakdown
   const activeSignalsSet = new Set<string>();
@@ -892,6 +913,25 @@ export const calculatePosition = (
       if (!logMsg) {
           logMsg = { module: 'MITIGATION', message: 'Multipath detected, accuracy degraded', level: 'warn' };
       }
+  }
+
+  // Apply Jamming and Spoofing Probabilities
+  mitigationResult.correctedPosition.jammingProbability = mitigationResult.jammingProbability;
+  mitigationResult.correctedPosition.spoofingProbability = mitigationResult.spoofingProbability;
+
+  // Update Integrity State based on threats
+  if (mitigationResult.spoofingProbability > 70 || mitigationResult.jammingProbability > 80) {
+      mitigationResult.correctedPosition.integrityState = 'COMPROMISED';
+      if (!logMsg) {
+          logMsg = { module: 'SECURITY', message: 'CRITICAL: High probability of Jamming/Spoofing', level: 'error' };
+      }
+  } else if (mitigationResult.spoofingProbability > 30 || mitigationResult.jammingProbability > 40) {
+      mitigationResult.correctedPosition.integrityState = 'SUSPICIOUS';
+      if (!logMsg) {
+          logMsg = { module: 'SECURITY', message: 'WARNING: Suspicious RF Environment', level: 'warn' };
+      }
+  } else {
+      mitigationResult.correctedPosition.integrityState = 'TRUSTED';
   }
 
   return {
